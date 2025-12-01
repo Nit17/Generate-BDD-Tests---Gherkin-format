@@ -87,12 +87,12 @@ Examples:
         url = 'https://' + url
     
     print("=" * 60)
-    print("🧪 BDD Test Generator - Gherkin Format")
+    print("BDD Test Generator - Gherkin Format")
     print("=" * 60)
-    print(f"\n📍 URL: {url}")
-    print(f"📁 Output: {args.output}")
-    print(f"🤖 LLM Provider: {args.provider}")
-    print(f"🖥️  Headless: {not args.no_headless}")
+    print(f"\nURL: {url}")
+    print(f"Output: {args.output}")
+    print(f"LLM Provider: {args.provider}")
+    print(f"Headless: {not args.no_headless}")
     print()
     
     try:
@@ -103,9 +103,9 @@ Examples:
         )
         
         if args.quick:
-            print("🔍 Performing quick scan...")
+            print("Performing quick scan...")
             result = await detector.quick_scan(url)
-            print(f"\n📊 Quick Scan Results:")
+            print(f"\nQuick Scan Results:")
             print(f"   Navigation menus: {len(result.get('navigation_menus', []))}")
             print(f"   Interactive elements: {len(result.get('interactive_elements', []))}")
             print(f"   Dropdowns: {len(result.get('dropdowns', []))}")
@@ -113,30 +113,30 @@ Examples:
             return
         
         # Full analysis
-        print("🔍 Analyzing webpage...")
+        print("Analyzing webpage...")
         print("   This may take a minute as we test interactions...\n")
         
         analysis = await detector.analyze_page(url)
         
-        print(f"✅ Analysis complete!")
-        print(f"   📄 Page: {analysis.page_title}")
-        print(f"   🖱️  Hover interactions: {len(analysis.hover_interactions)}")
-        print(f"   💬 Popup interactions: {len(analysis.popup_interactions)}")
+        print(f"Analysis complete!")
+        print(f"   Page: {analysis.page_title}")
+        print(f"   Hover interactions: {len(analysis.hover_interactions)}")
+        print(f"   Popup interactions: {len(analysis.popup_interactions)}")
         print()
         
         if len(analysis.hover_interactions) == 0 and len(analysis.popup_interactions) == 0:
-            print("⚠️  No interactive elements detected on this page.")
+            print("No interactive elements detected on this page.")
             print("   The page might be static or require authentication.")
             return
         
         # Generate Gherkin
-        print("🤖 Generating Gherkin scenarios...")
+        print("Generating Gherkin scenarios...")
         
         try:
             generator = GherkinGenerator(provider=args.provider)
             feature_content = await generator.generate_combined_feature(analysis)
         except ValueError as e:
-            print(f"⚠️  LLM not available: {e}")
+            print(f"LLM not available: {e}")
             print("   Using fallback generator...")
             generator = GherkinGenerator.__new__(GherkinGenerator)
             feature_content = generator._generate_fallback_feature(analysis)
@@ -145,13 +145,13 @@ Examples:
         writer = FeatureWriter(output_dir=args.output)
         file_path = writer.write_raw_content(feature_content, url)
         
-        print(f"\n✅ Feature file generated!")
-        print(f"   📁 Saved to: {file_path}")
+        print(f"\nFeature file generated!")
+        print(f"   Saved to: {file_path}")
         print()
         
         # Print the content
         print("=" * 60)
-        print("📝 Generated Gherkin Scenarios:")
+        print("Generated Gherkin Scenarios:")
         print("=" * 60)
         print(feature_content)
         print("=" * 60)
@@ -159,10 +159,10 @@ Examples:
         # Also save analysis report
         if args.verbose:
             report_path = writer.write_analysis_report(analysis)
-            print(f"\n📊 Analysis report: {report_path}")
+            print(f"\nAnalysis report: {report_path}")
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

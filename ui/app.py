@@ -29,11 +29,10 @@ def run_async(coro):
 def main():
     st.set_page_config(
         page_title="BDD Test Generator",
-        page_icon="🧪",
         layout="wide"
     )
     
-    st.title("🧪 BDD Test Generator")
+    st.title("BDD Test Generator")
     st.markdown("""
     Generate Gherkin-style BDD test scenarios from website interactions automatically.
     
@@ -43,7 +42,7 @@ def main():
     """)
     
     # Sidebar configuration
-    st.sidebar.header("⚙️ Configuration")
+    st.sidebar.header("Configuration")
     
     llm_provider = st.sidebar.selectbox(
         "LLM Provider",
@@ -79,7 +78,7 @@ def main():
     
     # Main content
     url = st.text_input(
-        "🌐 Enter Website URL",
+        "Enter Website URL",
         placeholder="https://example.com",
         help="Enter the full URL of the website to analyze"
     )
@@ -93,7 +92,7 @@ def main():
     with col3:
         save_to_file = st.checkbox("Save to .feature file", value=True)
     
-    if st.button("🚀 Generate Tests", type="primary", use_container_width=True):
+    if st.button("Generate Tests", type="primary", use_container_width=True):
         if not url:
             st.error("Please enter a URL")
             return
@@ -153,28 +152,28 @@ def main():
             status_text.text("Formatting output...")
             
             # Display the generated feature
-            st.subheader("📝 Generated Gherkin Scenarios")
+            st.subheader("Generated Gherkin Scenarios")
             st.code(feature_content, language="gherkin")
             
             # Save to file if requested
             if save_to_file:
                 writer = FeatureWriter()
                 file_path = writer.write_raw_content(feature_content, url)
-                st.success(f"✅ Feature file saved to: {file_path}")
+                st.success(f"Feature file saved to: {file_path}")
             
             # Download button
             st.download_button(
-                label="📥 Download .feature file",
+                label="Download .feature file",
                 data=feature_content,
                 file_name="generated_tests.feature",
                 mime="text/plain"
             )
             
             progress_bar.progress(100)
-            status_text.text("✅ Generation complete!")
+            status_text.text("Generation complete!")
             
             # Show detailed analysis in expander
-            with st.expander("📊 Detailed Analysis"):
+            with st.expander("Detailed Analysis"):
                 st.json({
                     "url": analysis.url,
                     "metadata": analysis.metadata,
@@ -204,7 +203,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center'>
-        <p>Built with ❤️ using Playwright, OpenAI/Gemini, and Streamlit</p>
+        <p>Built with Playwright, OpenAI/Gemini, and Streamlit</p>
         <p><a href="https://cucumber.io/docs/gherkin/" target="_blank">Gherkin Reference</a></p>
     </div>
     """, unsafe_allow_html=True)
