@@ -194,6 +194,174 @@ Feature: Validate navigation menu functionality
 
 ## Architecture
 
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              USER INTERFACES                                     │
+├─────────────────────┬─────────────────────┬─────────────────────────────────────┤
+│      CLI            │    FastAPI          │         Streamlit UI                │
+│    main.py          │   api/main.py       │         ui/app.py                   │
+│                     │                     │                                     │
+│  python main.py     │  POST /generate     │  Browser-based                      │
+│  --url <url>        │  POST /analyze      │  Interactive Form                   │
+└─────────┬───────────┴──────────┬──────────┴──────────────┬──────────────────────┘
+          │                      │                         │
+          └──────────────────────┼─────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         INTERACTION DETECTOR                                     │
+│                   src/analyzer/interaction_detector.py                          │
+│                                                                                 │
+│  • Coordinates browser automation and DOM analysis                              │
+│  • Detects hover interactions (dropdowns, tooltips)                             │
+│  • Detects popup/modal interactions                                             │
+│  • Returns PageAnalysis object                                                  │
+└────────────────────────────────┬────────────────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+              ▼                  ▼                  ▼
+┌─────────────────────┐ ┌─────────────────┐ ┌─────────────────────┐
+│  BROWSER AUTOMATION │ │  DOM ANALYZER   │ │   ELEMENT           │
+│  src/browser/       │ │  src/analyzer/  │ │   EXTRACTOR         │
+│  automation.py      │ │  dom_analyzer.py│ │                     │
+│                     │ │                 │ │                     │
+│  • Playwright       │ │  • BeautifulSoup│ │  • Get element info │
+│  • Navigate pages   │ │  • Parse HTML   │ │  • CSS selectors    │
+│  • Hover elements   │ │  • Find elements│ │  • ARIA attributes  │
+│  • Click buttons    │ │  • Structure    │ │  • Bounding boxes   │
+│  • Detect popups    │ │    analysis     │ │                     │
+└─────────────────────┘ └─────────────────┘ └─────────────────────┘
+              │                  │                  │
+              └──────────────────┼──────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              PAGE ANALYSIS                                       │
+│                          src/models/schemas.py                                   │
+│                                                                                 │
+│  PageAnalysis {                                                                 │
+│    url: str                                                                     │
+│    page_title: str                                                              │
+│    hover_interactions: List[HoverInteraction]                                   │
+│    popup_interactions: List[PopupInteraction]                                   │
+│    navigation_elements: List[ElementInfo]                                       │
+│    metadata: Dict                                                               │
+│  }                                                                              │
+└────────────────────────────────┬────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           GHERKIN GENERATOR                                      │
+│                      src/llm/gherkin_generator.py                               │
+│                                                                                 │
+│  • Transforms PageAnalysis into Gherkin scenarios                               │
+│  • Uses LLM for natural language generation                                     │
+│  • Follows Cucumber Gherkin specification                                       │
+│  • Fallback template generation if LLM unavailable                              │
+└────────────────────────────────┬────────────────────────────────────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+                    ▼                         ▼
+┌───────────────────────────────┐ ┌───────────────────────────────┐
+│       LLM PROVIDERS           │ │     FALLBACK GENERATOR        │
+│    src/llm/providers.py       │ │                               │
+│                               │ │  Template-based generation    │
+│  ┌─────────────────────────┐  │ │  when LLM is unavailable      │
+│  │    ILLMProvider         │  │ │                               │
+│  │    (Interface)          │  │ └───────────────────────────────┘
+│  └───────────┬─────────────┘  │
+│              │                │
+│    ┌─────────┴─────────┐      │
+│    │                   │      │
+│    ▼                   ▼      │
+│ ┌────────────┐ ┌────────────┐ │
+│ │  OpenAI    │ │  Gemini    │ │
+│ │  Provider  │ │  Provider  │ │
+│ │            │ │            │ │
+│ │  GPT-4     │ │ gemini-2.0 │ │
+│ │            │ │   -flash   │ │
+│ └────────────┘ └────────────┘ │
+└───────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            FEATURE WRITER                                        │
+│                      src/output/feature_writer.py                               │
+│                                                                                 │
+│  • Formats Gherkin content                                                      │
+│  • Writes .feature files with timestamps                                        │
+│  • Generates analysis reports (JSON)                                            │
+└────────────────────────────────┬────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                               OUTPUT                                             │
+│                           output/*.feature                                       │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │ Feature: Validate navigation menu functionality                         │    │
+│  │                                                                         │    │
+│  │   Scenario: Verify dropdown menu appears on hover                       │    │
+│  │     Given the user is on the "https://example.com" page                 │    │
+│  │     When the user hovers over the navigation menu "Products"            │    │
+│  │     Then a dropdown menu should appear                                  │    │
+│  │     And the dropdown should contain "Product A"                         │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Diagram
+
+```
+┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   URL    │────▶│   Browser    │────▶│   Detect     │────▶│   Generate   │
+│  Input   │     │   Navigate   │     │ Interactions │     │   Gherkin    │
+└──────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+                        │                    │                    │
+                        ▼                    ▼                    ▼
+                 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+                 │  Dismiss     │     │  Hover &     │     │   LLM API    │
+                 │  Cookies     │     │  Click Test  │     │   Call       │
+                 └──────────────┘     └──────────────┘     └──────────────┘
+                        │                    │                    │
+                        ▼                    ▼                    ▼
+                 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+                 │  Extract     │     │  Build       │     │   Format &   │
+                 │  HTML/DOM    │     │ PageAnalysis │     │   Save       │
+                 └──────────────┘     └──────────────┘     └──────────────┘
+```
+
+### Component Interaction
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ServiceFactory (DIP)                        │
+│                        src/factory.py                            │
+│                                                                 │
+│   Creates and injects dependencies for all components           │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ IBrowserAuto-   │    │ ILLMProvider    │    │ IFeatureWriter  │
+│ mation          │    │                 │    │                 │
+│ (Interface)     │    │ (Interface)     │    │ (Interface)     │
+└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+         │                      │                      │
+         ▼                      ▼                      ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ BrowserAuto-    │    │ OpenAIProvider  │    │ FeatureWriter   │
+│ mation          │    │ GeminiProvider  │    │                 │
+│ (Implementation)│    │ (Implementations│    │ (Implementation)│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
 ### SOLID Principles
 
 This project follows SOLID design principles for maintainable and extensible code:
