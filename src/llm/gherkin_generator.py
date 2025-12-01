@@ -133,12 +133,22 @@ class GherkinGenerator(IGherkinGenerator):
             }
             interaction_data.append(data)
         
-        prompt = f"""Generate Gherkin BDD test scenarios for popup/modal interactions on a webpage.
+        prompt = f"""Generate Gherkin BDD test scenarios for popup/modal interactions following the official Cucumber Gherkin reference.
 
 URL: {url}
 
 Detected Popup Interactions:
 {json.dumps(interaction_data, indent=2)}
+
+=== GHERKIN SYNTAX RULES ===
+- Feature: High-level description, followed by scenarios
+- Scenario: Concrete example with Given/When/Then steps
+- Given: Precondition (initial state)
+- When: Action (user interaction)
+- Then: Expected outcome
+- And/But: Additional steps (same type as previous)
+- NO blank lines between steps within a scenario
+- 2-space indent for Scenario, 4-space for steps
 
 Requirements:
 1. Create a Feature for validating popup functionality
@@ -147,12 +157,11 @@ Requirements:
    - Verifying the popup title and content
    - Testing each button in the popup (cancel, continue, close, etc.)
    - Verifying URL changes after button clicks if applicable
-3. Use proper Gherkin syntax with Given, When, Then, And steps
-4. Make the scenarios descriptive and test real user flows
-5. Include both positive and edge case scenarios where applicable
+3. Keep steps continuous (no blank lines between Given/When/Then/And)
+4. Keep scenarios focused (3-5 steps recommended)
 
-Output ONLY the Gherkin feature file content, starting with "Feature:" and nothing else.
-Use proper indentation with 2 spaces.
+Output ONLY the Gherkin feature file content, starting with "Feature:".
+Use 2-space indentation for Scenario, 4-space for steps.
 """
 
         try:
@@ -179,12 +188,22 @@ Use proper indentation with 2 spaces.
             }
             interaction_data.append(data)
         
-        prompt = f"""Generate Gherkin BDD test scenarios for hover-based interactions on a webpage.
+        prompt = f"""Generate Gherkin BDD test scenarios for hover-based interactions following the official Cucumber Gherkin reference.
 
 URL: {url}
 
 Detected Hover Interactions:
 {json.dumps(interaction_data, indent=2)}
+
+=== GHERKIN SYNTAX RULES ===
+- Feature: High-level description, followed by scenarios
+- Scenario: Concrete example with Given/When/Then steps
+- Given: Precondition (initial state)
+- When: Action (user interaction)  
+- Then: Expected outcome
+- And/But: Additional steps (same type as previous)
+- NO blank lines between steps within a scenario
+- 2-space indent for Scenario, 4-space for steps
 
 Requirements:
 1. Create a Feature for validating navigation menu/hover functionality
@@ -193,12 +212,11 @@ Requirements:
    - Verifying the dropdown content becomes visible
    - Clicking on revealed links
    - Verifying URL changes after clicking links
-3. Use proper Gherkin syntax with Given, When, Then, And steps
-4. Make the scenarios descriptive and test real user flows
-5. Generate at least one scenario for each significant hover interaction
+3. Keep steps continuous (no blank lines between Given/When/Then/And)
+4. Keep scenarios focused (3-5 steps recommended)
 
-Output ONLY the Gherkin feature file content, starting with "Feature:" and nothing else.
-Use proper indentation with 2 spaces.
+Output ONLY the Gherkin feature file content, starting with "Feature:".
+Use 2-space indentation for Scenario, 4-space for steps.
 """
 
         try:
@@ -291,7 +309,7 @@ Use proper indentation with 2 spaces.
                 'revealed_links': interaction.revealed_links[:10]
             })
         
-        prompt = f"""Generate comprehensive Gherkin BDD test scenarios for a webpage.
+        prompt = f"""Generate comprehensive Gherkin BDD test scenarios for a webpage following the official Cucumber Gherkin reference (https://cucumber.io/docs/gherkin/reference).
 
 URL: {analysis.url}
 Page Title: {analysis.page_title}
@@ -302,35 +320,48 @@ Page Title: {analysis.page_title}
 === HOVER/DROPDOWN INTERACTIONS ===
 {json.dumps(hover_data, indent=2) if hover_data else "No hover interactions detected"}
 
+=== GHERKIN SYNTAX RULES (per Cucumber reference) ===
+1. Feature: First keyword, followed by colon and feature name
+2. Scenario: Concrete example that illustrates a business rule  
+3. Given: Initial context (precondition) - what state the system is in
+4. When: Action/event - what the user does
+5. Then: Expected outcome - what should happen
+6. And/But: Continue previous step type (no blank lines between steps!)
+7. Use 2-space indentation for scenarios, 4-space for steps
+8. Keep scenarios focused (3-5 steps recommended)
+9. Steps should be continuous WITHOUT blank lines between them
+
 === REQUIREMENTS ===
-1. Generate TWO Feature blocks:
-   - Feature 1: Validate popup/modal functionality (if popup interactions exist)
-   - Feature 2: Validate hover/navigation menu functionality (if hover interactions exist)
+1. Generate Feature block(s) for detected interactions
+2. For POPUP scenarios:
+   - Given the user is on the page
+   - When the user clicks the trigger element
+   - Then a popup should appear with title
+   - And the popup should contain expected buttons
+   - When the user clicks Cancel/Continue
+   - Then expected navigation occurs
 
-2. For POPUP scenarios, include:
-   - Opening the popup by clicking the trigger
-   - Verifying popup title appears
-   - Testing Cancel button (popup closes, user stays on page)
-   - Testing Continue/Confirm button (navigation to new URL)
+3. For HOVER scenarios:
+   - Given the user is on the page
+   - When the user hovers over the menu item
+   - Then a dropdown should appear
+   - And the dropdown should contain specific links
 
-3. For HOVER scenarios, include:
-   - Hovering over navigation items
-   - Verifying dropdown appears
-   - Clicking revealed links
-   - Verifying URL navigation
+4. CRITICAL: Do NOT put blank lines between consecutive steps (Given, When, Then, And, But)
 
-4. Use proper Gherkin syntax:
-   - Given (precondition)
-   - When (action)
-   - Then (expected result)
-   - And (additional steps)
+=== EXAMPLE FORMAT ===
+Feature: Validate navigation menu
 
-5. Make scenarios descriptive and testable
-6. Use actual element text and URLs from the data provided
+  Scenario: User hovers over menu to reveal dropdown
+    Given the user is on the homepage
+    When the user hovers over "Products" menu
+    Then a dropdown menu should appear
+    And the link "Category A" should be visible
+    And the link "Category B" should be visible
 
-Output ONLY valid Gherkin feature file content.
-Separate multiple Features with a blank line.
-Use 2-space indentation.
+Output ONLY valid Gherkin feature file content starting with "Feature:".
+Use 2-space indentation for Scenario, 4-space for steps.
+NO blank lines between steps within a scenario.
 """
 
         try:
