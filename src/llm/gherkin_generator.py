@@ -57,7 +57,7 @@ class OpenAIProvider(BaseLLMProvider):
 class GeminiProvider(BaseLLMProvider):
     """Google Gemini provider."""
     
-    def __init__(self, api_key: str, model: str = "gemini-pro"):
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         try:
             import google.generativeai as genai
             genai.configure(api_key=api_key)

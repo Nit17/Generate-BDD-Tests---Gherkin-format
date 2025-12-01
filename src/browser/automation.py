@@ -19,7 +19,7 @@ class BrowserAutomation:
     Playwright-based browser automation for detecting and interacting with web elements.
     """
 
-    def __init__(self, headless: bool = True, timeout: int = 30000):
+    def __init__(self, headless: bool = True, timeout: int = 10000):
         """
         Initialize the browser automation.
         
@@ -77,6 +77,9 @@ class BrowserAutomation:
         await self.page.goto(url, wait_until='networkidle')
         await asyncio.sleep(2)  # Additional wait for dynamic content
         
+        # Try to dismiss cookie consent banners
+        await self._dismiss_cookie_banners()
+        
         title = await self.page.title()
         current_url = self.page.url
         
@@ -85,6 +88,40 @@ class BrowserAutomation:
             'url': current_url,
             'loaded': True
         }
+
+    async def _dismiss_cookie_banners(self):
+        """Try to dismiss common cookie consent banners."""
+        cookie_selectors = [
+            '#onetrust-accept-btn-handler',
+            '.onetrust-accept-btn-handler',
+            '[id*="accept"][id*="cookie"]',
+            '[class*="accept"][class*="cookie"]',
+            'button[aria-label*="Accept"]',
+            'button[aria-label*="accept"]',
+            '#accept-cookies',
+            '.accept-cookies',
+            '[data-testid="cookie-accept"]',
+            '.cookie-consent-accept',
+            '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+            '.cc-accept',
+            '#cookie-accept',
+            'button:has-text("Accept All")',
+            'button:has-text("Accept Cookies")',
+            'button:has-text("I Accept")',
+            'button:has-text("OK")',
+            'button:has-text("Agree")',
+        ]
+        
+        for selector in cookie_selectors:
+            try:
+                button = await self.page.query_selector(selector)
+                if button and await button.is_visible():
+                    await button.click()
+                    logger.info(f"Dismissed cookie banner using: {selector}")
+                    await asyncio.sleep(1)
+                    return
+            except Exception:
+                continue
 
     async def get_element_info(self, element: ElementHandle) -> Optional[ElementInfo]:
         """
