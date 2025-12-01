@@ -10,5 +10,5 @@ dist/
 build/
 *.egg-info/
 .DS_Store
-output/*.feature
 !output/.gitkeep
+!output/sample_hover_tests.feature
