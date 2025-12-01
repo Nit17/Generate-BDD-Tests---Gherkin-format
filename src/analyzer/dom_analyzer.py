@@ -1,21 +1,32 @@
 """
 DOM Analyzer module for analyzing webpage structure.
 Uses BeautifulSoup and lxml for HTML parsing.
+
+Follows SOLID principles:
+- SRP: Only responsible for DOM analysis
+- OCP: Can be extended with new analysis methods
+- DIP: Implements IDOMAnalyzer interface
 """
 
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup
 import logging
 
+from ..interfaces.analyzer import IDOMAnalyzer
 from ..models.schemas import ElementInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DOMAnalyzer:
+class DOMAnalyzer(IDOMAnalyzer):
     """
     Analyzes DOM structure to identify interactive elements.
+    
+    Follows:
+    - SRP: Only handles DOM parsing and analysis
+    - OCP: Analysis methods can be extended without modification
+    - DIP: Implements IDOMAnalyzer interface
     """
 
     def __init__(self, html_content: str):

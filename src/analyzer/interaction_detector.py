@@ -1,12 +1,19 @@
 """
 Interaction Detector module.
 Coordinates browser automation and DOM analysis to detect interactions.
+
+Follows SOLID principles:
+- SRP: Coordinates detection, delegates to specialized modules
+- OCP: Detection strategies can be extended
+- DIP: Depends on abstractions (IBrowserAutomation, IDOMAnalyzer)
 """
 
 import asyncio
 from typing import List, Dict, Any, Optional
 import logging
 
+from ..interfaces.analyzer import IInteractionDetector
+from ..interfaces.browser import IBrowserAutomation
 from ..browser.automation import BrowserAutomation
 from ..models.schemas import (
     PageAnalysis, HoverInteraction, PopupInteraction, 
@@ -18,21 +25,39 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class InteractionDetector:
+class InteractionDetector(IInteractionDetector):
     """
     Detects and analyzes hover and popup interactions on a webpage.
+    
+    Follows:
+    - SRP: Coordinates detection workflow
+    - OCP: New detection strategies can be added
+    - DIP: Can accept injected browser automation for testing
     """
 
-    def __init__(self, headless: bool = True, timeout: int = 30000):
+    def __init__(
+        self, 
+        headless: bool = True, 
+        timeout: int = 30000,
+        browser_automation: Optional[IBrowserAutomation] = None
+    ):
         """
         Initialize the interaction detector.
         
         Args:
             headless: Run browser in headless mode
             timeout: Default timeout in milliseconds
+            browser_automation: Optional injected browser automation (for DIP)
         """
         self.headless = headless
         self.timeout = timeout
+        self._injected_browser = browser_automation
+
+    def _create_browser(self) -> BrowserAutomation:
+        """Create browser instance. Allows injection for testing (DIP)."""
+        if self._injected_browser:
+            return self._injected_browser
+        return BrowserAutomation(headless=self.headless, timeout=self.timeout)
 
     async def analyze_page(self, url: str) -> PageAnalysis:
         """
@@ -46,12 +71,14 @@ class InteractionDetector:
         """
         logger.info(f"Starting analysis of: {url}")
         
-        async with BrowserAutomation(headless=self.headless, timeout=self.timeout) as browser:
+        browser = self._create_browser()
+        
+        async with browser:
             # Navigate to the page
             page_info = await browser.navigate(url)
             
             # Get page content for DOM analysis
-            html_content = await browser.page.content()
+            html_content = await browser.get_page_content()
             dom_analyzer = DOMAnalyzer(html_content)
             
             # Get page metadata
@@ -78,7 +105,7 @@ class InteractionDetector:
 
     async def _detect_hover_interactions(
         self, 
-        browser: BrowserAutomation, 
+        browser: BrowserAutomation,
         dom_analyzer: DOMAnalyzer
     ) -> List[HoverInteraction]:
         """

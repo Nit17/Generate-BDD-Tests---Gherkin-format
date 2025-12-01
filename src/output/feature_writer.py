@@ -1,6 +1,11 @@
 """
 Feature Writer module.
 Handles writing Gherkin features to .feature files.
+
+Follows SOLID principles:
+- SRP: Only responsible for writing feature files
+- OCP: Output formatters can be extended
+- DIP: Implements IFeatureWriter interface
 """
 
 import os
@@ -9,40 +14,124 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
+from ..interfaces.output import IFeatureWriter
 from ..models.schemas import GherkinFeature, PageAnalysis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class FeatureWriter:
+class FilenameGenerator:
+    """
+    Generates valid filenames from URLs and feature names.
+    
+    Follows SRP: Only handles filename generation logic.
+    """
+    
+    @staticmethod
+    def sanitize(name: str) -> str:
+        """Convert a string to a valid filename."""
+        name = re.sub(r'[^\w\s-]', '', name)
+        name = re.sub(r'[-\s]+', '_', name)
+        return name.lower()[:50]
+    
+    @staticmethod
+    def from_url(url: str) -> str:
+        """Extract domain name from URL for filename."""
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        domain = parsed.netloc.replace('www.', '')
+        return FilenameGenerator.sanitize(domain.split('.')[0])
+
+
+class FeatureFormatter:
+    """
+    Formats Gherkin features to string content.
+    
+    Follows SRP: Only handles feature formatting.
+    """
+    
+    @staticmethod
+    def format_feature(feature: GherkinFeature) -> str:
+        """Format a GherkinFeature to string content."""
+        lines = []
+        
+        # Tags
+        if feature.tags:
+            lines.append(' '.join(feature.tags))
+        
+        # Feature header
+        lines.append(f"Feature: {feature.name}")
+        
+        # Description
+        if feature.description:
+            for desc_line in feature.description.split('\n'):
+                lines.append(f"  {desc_line}")
+            lines.append("")
+        
+        # Scenarios
+        for scenario in feature.scenarios:
+            lines.append("")
+            
+            if scenario.tags:
+                lines.append(f"  {' '.join(scenario.tags)}")
+            
+            lines.append(f"  Scenario: {scenario.name}")
+            
+            for step in scenario.steps:
+                lines.append(f"    {step}")
+        
+        lines.append("")
+        return '\n'.join(lines)
+    
+    @staticmethod
+    def create_header(url: str) -> str:
+        """Create a file header with metadata."""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return f"""# Auto-generated BDD Test Scenarios
+# URL: {url}
+# Generated: {timestamp}
+# Generator: BDD Test Generator
+
+"""
+
+
+class FeatureWriter(IFeatureWriter):
     """
     Writes Gherkin features to .feature files.
+    
+    Follows:
+    - SRP: Delegates formatting to FeatureFormatter
+    - OCP: Formatters can be extended/replaced
+    - DIP: Implements IFeatureWriter interface
     """
 
-    def __init__(self, output_dir: str = "./output"):
+    def __init__(
+        self, 
+        output_dir: str = "./output",
+        formatter: Optional[FeatureFormatter] = None,
+        filename_generator: Optional[FilenameGenerator] = None
+    ):
         """
         Initialize the feature writer.
         
         Args:
             output_dir: Directory to write feature files
+            formatter: Optional custom formatter (DIP)
+            filename_generator: Optional custom filename generator (DIP)
         """
         self.output_dir = output_dir
+        self._formatter = formatter or FeatureFormatter()
+        self._filename_gen = filename_generator or FilenameGenerator()
         os.makedirs(output_dir, exist_ok=True)
 
     def _sanitize_filename(self, name: str) -> str:
         """Convert a string to a valid filename."""
-        # Remove or replace invalid characters
-        name = re.sub(r'[^\w\s-]', '', name)
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.lower()[:50]
+        return self._filename_gen.sanitize(name)
 
     def _get_domain_from_url(self, url: str) -> str:
         """Extract domain name from URL."""
-        import urllib.parse
-        parsed = urllib.parse.urlparse(url)
-        domain = parsed.netloc.replace('www.', '')
-        return self._sanitize_filename(domain.split('.')[0])
+        return self._filename_gen.from_url(url)
 
     def write_feature(
         self, 
@@ -190,6 +279,31 @@ class FeatureWriter:
                 lines.append(f"    {step}")
         
         return '\n'.join(lines)
+
+    def write_from_analysis(
+        self, 
+        analysis: PageAnalysis, 
+        feature_content: str
+    ) -> str:
+        """
+        Write feature file from page analysis and generated content.
+        
+        Args:
+            analysis: PageAnalysis object with URL info
+            feature_content: Generated Gherkin content
+            
+        Returns:
+            Path to the written file
+        """
+        domain = self._get_domain_from_url(analysis.url)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{domain}_tests_{timestamp}"
+        
+        return self.write_raw_content(
+            content=feature_content,
+            url=analysis.url,
+            filename=filename
+        )
 
     def get_feature_content(self, features: List[GherkinFeature]) -> str:
         """

@@ -192,6 +192,44 @@ Feature: Validate navigation menu functionality
 | Image Overlays | Content revealed on image hover |
 | Accordion Elements | Expandable content sections |
 
+## Architecture
+
+### SOLID Principles
+
+This project follows SOLID design principles for maintainable and extensible code:
+
+| Principle | Implementation |
+|-----------|---------------|
+| **Single Responsibility (SRP)** | Each class has one job: `BrowserAutomation` handles browser control, `DOMAnalyzer` parses HTML, `GherkinGenerator` creates tests |
+| **Open/Closed (OCP)** | New LLM providers can be added without modifying existing code - just implement `ILLMProvider` |
+| **Liskov Substitution (LSP)** | All LLM providers (`OpenAIProvider`, `GeminiProvider`, `MockLLMProvider`) are interchangeable |
+| **Interface Segregation (ISP)** | Focused interfaces: `IBrowserAutomation`, `IDOMAnalyzer`, `ILLMProvider`, `IFeatureWriter` |
+| **Dependency Inversion (DIP)** | High-level modules depend on abstractions via `ServiceFactory` for dependency injection |
+
+### Project Structure
+
+```
+src/
+├── interfaces/           # Abstract base classes (DIP)
+│   ├── browser.py       # IBrowserAutomation
+│   ├── analyzer.py      # IDOMAnalyzer, IInteractionDetector
+│   ├── llm.py           # ILLMProvider, IGherkinGenerator
+│   └── output.py        # IFeatureWriter
+├── browser/
+│   └── automation.py    # Playwright implementation
+├── analyzer/
+│   ├── dom_analyzer.py  # BeautifulSoup implementation
+│   └── interaction_detector.py
+├── llm/
+│   ├── providers.py     # OpenAI, Gemini, Mock providers
+│   └── gherkin_generator.py
+├── output/
+│   └── feature_writer.py
+├── models/
+│   └── schemas.py       # Pydantic models
+└── factory.py           # ServiceFactory for DI
+```
+
 ## Tech Stack
 
 | Layer | Technology |

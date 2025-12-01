@@ -1,14 +1,19 @@
 """
 Gherkin Generator module.
 Uses LLM (OpenAI GPT-4 or Google Gemini) to generate Gherkin scenarios.
+
+Follows SOLID principles:
+- SRP: Focuses only on Gherkin generation logic
+- OCP: New LLM providers can be added without modifying this class
+- DIP: Depends on ILLMProvider abstraction, not concrete implementations
 """
 
 import os
 import json
 from typing import List, Dict, Any, Optional
-from abc import ABC, abstractmethod
 import logging
 
+from ..interfaces.llm import ILLMProvider, IGherkinGenerator
 from ..models.schemas import (
     PageAnalysis, GherkinFeature, GherkinScenario,
     HoverInteraction, PopupInteraction
@@ -18,90 +23,64 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class BaseLLMProvider(ABC):
-    """Abstract base class for LLM providers."""
-    
-    @abstractmethod
-    async def generate(self, prompt: str) -> str:
-        """Generate text from a prompt."""
-        pass
+# Import providers for backward compatibility
+from .providers import OpenAIProvider, GeminiProvider
 
 
-class OpenAIProvider(BaseLLMProvider):
-    """OpenAI GPT provider."""
-    
-    def __init__(self, api_key: str, model: str = "gpt-4"):
-        try:
-            from openai import AsyncOpenAI
-            self.client = AsyncOpenAI(api_key=api_key)
-            self.model = model
-        except ImportError:
-            raise ImportError("openai package not installed. Run: pip install openai")
-    
-    async def generate(self, prompt: str) -> str:
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert QA engineer specializing in BDD testing and Gherkin syntax. Generate clean, well-formatted Gherkin scenarios based on the provided webpage interaction data."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=4000
-        )
-        return response.choices[0].message.content
-
-
-class GeminiProvider(BaseLLMProvider):
-    """Google Gemini provider."""
-    
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(model)
-        except ImportError:
-            raise ImportError("google-generativeai package not installed. Run: pip install google-generativeai")
-    
-    async def generate(self, prompt: str) -> str:
-        response = await self.model.generate_content_async(
-            f"You are an expert QA engineer specializing in BDD testing and Gherkin syntax. Generate clean, well-formatted Gherkin scenarios based on the provided webpage interaction data.\n\n{prompt}"
-        )
-        return response.text
-
-
-class GherkinGenerator:
+class GherkinGenerator(IGherkinGenerator):
     """
     Generates Gherkin scenarios from page analysis using LLM.
+    
+    Follows:
+    - SRP: Only handles Gherkin generation, delegates LLM calls
+    - OCP: Supports new LLM providers without code changes
+    - DIP: Depends on ILLMProvider abstraction
     """
 
-    def __init__(self, provider: str = "openai", api_key: Optional[str] = None):
+    def __init__(
+        self, 
+        llm_provider: Optional[ILLMProvider] = None,
+        provider: str = "openai", 
+        api_key: Optional[str] = None
+    ):
         """
         Initialize the Gherkin generator.
         
         Args:
-            provider: LLM provider ('openai' or 'gemini')
-            api_key: API key for the provider
+            llm_provider: Injected LLM provider (preferred for DIP)
+            provider: LLM provider name ('openai' or 'gemini') - legacy
+            api_key: API key for the provider - legacy
         """
-        self.provider_name = provider.lower()
+        if llm_provider is not None:
+            self.llm = llm_provider
+        else:
+            # Legacy initialization for backward compatibility
+            self._init_legacy_provider(provider, api_key)
+    
+    def _init_legacy_provider(self, provider: str, api_key: Optional[str]) -> None:
+        """Initialize LLM provider using legacy parameters."""
+        provider_name = provider.lower()
         
         if api_key is None:
-            if self.provider_name == "openai":
+            if provider_name == "openai":
                 api_key = os.getenv("OPENAI_API_KEY")
-            elif self.provider_name == "gemini":
+            elif provider_name == "gemini":
                 api_key = os.getenv("GEMINI_API_KEY")
         
         if not api_key:
-            raise ValueError(f"API key required for {provider}. Set {provider.upper()}_API_KEY environment variable.")
+            raise ValueError(
+                f"API key required for {provider}. "
+                f"Set {provider.upper()}_API_KEY environment variable."
+            )
         
-        if self.provider_name == "openai":
-            self.llm = OpenAIProvider(api_key)
-        elif self.provider_name == "gemini":
-            self.llm = GeminiProvider(api_key)
+        if provider_name == "openai":
+            self.llm = OpenAIProvider(api_key=api_key)
+        elif provider_name == "gemini":
+            self.llm = GeminiProvider(api_key=api_key)
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Use 'openai' or 'gemini'.")
+            raise ValueError(
+                f"Unsupported provider: {provider}. Use 'openai' or 'gemini'."
+            )
 
     async def generate_features(self, analysis: PageAnalysis) -> List[GherkinFeature]:
         """

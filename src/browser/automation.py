@@ -1,6 +1,11 @@
 """
 Browser automation module using Playwright.
 Handles page loading, element interaction, and state capture.
+
+Follows SOLID principles:
+- SRP: Handles only browser automation concerns
+- OCP: Can be extended for different browser engines
+- DIP: Implements IBrowserAutomation interface
 """
 
 import asyncio
@@ -8,15 +13,152 @@ from typing import List, Dict, Any, Optional, Tuple
 from playwright.async_api import async_playwright, Page, Browser, ElementHandle, Locator
 import logging
 
+from ..interfaces.browser import IBrowserAutomation
 from ..models.schemas import ElementInfo, HoverInteraction, PopupInteraction, InteractionType
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class BrowserAutomation:
+class CookieBannerHandler:
+    """
+    Handles cookie consent banner dismissal.
+    
+    Follows SRP: Only responsible for cookie banner handling.
+    """
+    
+    COOKIE_SELECTORS = [
+        '#onetrust-accept-btn-handler',
+        '.onetrust-accept-btn-handler',
+        '[id*="accept"][id*="cookie"]',
+        '[class*="accept"][class*="cookie"]',
+        'button[aria-label*="Accept"]',
+        'button[aria-label*="accept"]',
+        '#accept-cookies',
+        '.accept-cookies',
+        '[data-testid="cookie-accept"]',
+        '.cookie-consent-accept',
+        '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+        '.cc-accept',
+        '#cookie-accept',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept Cookies")',
+        'button:has-text("I Accept")',
+        'button:has-text("OK")',
+        'button:has-text("Agree")',
+    ]
+    
+    def __init__(self, page: Page):
+        self.page = page
+    
+    async def dismiss(self) -> bool:
+        """Try to dismiss cookie consent banners. Returns True if dismissed."""
+        for selector in self.COOKIE_SELECTORS:
+            try:
+                button = await self.page.query_selector(selector)
+                if button and await button.is_visible():
+                    await button.click()
+                    logger.info(f"Dismissed cookie banner using: {selector}")
+                    await asyncio.sleep(1)
+                    return True
+            except Exception:
+                continue
+        return False
+
+
+class ElementExtractor:
+    """
+    Extracts information from DOM elements.
+    
+    Follows SRP: Only responsible for element information extraction.
+    """
+    
+    def __init__(self, page: Page):
+        self.page = page
+    
+    async def get_element_info(self, element: ElementHandle) -> Optional[ElementInfo]:
+        """Extract information from an element handle."""
+        try:
+            tag_name = await element.evaluate('el => el.tagName.toLowerCase()')
+            text_content = await element.evaluate(
+                'el => el.textContent?.trim()?.substring(0, 200) || ""'
+            )
+            aria_label = await element.get_attribute('aria-label')
+            role = await element.get_attribute('role')
+            class_attr = await element.get_attribute('class') or ''
+            classes = class_attr.split() if class_attr else []
+            
+            attributes = {}
+            for attr in ['href', 'data-testid', 'id', 'name', 'type', 'title']:
+                value = await element.get_attribute(attr)
+                if value:
+                    attributes[attr] = value
+            
+            bounding_box = None
+            try:
+                box = await element.bounding_box()
+                if box:
+                    bounding_box = box
+            except:
+                pass
+            
+            selector = await self._generate_selector(element)
+            
+            return ElementInfo(
+                selector=selector,
+                tag_name=tag_name,
+                text_content=text_content[:200] if text_content else None,
+                aria_label=aria_label,
+                role=role,
+                classes=classes[:10],
+                attributes=attributes,
+                bounding_box=bounding_box
+            )
+        except Exception as e:
+            logger.warning(f"Error extracting element info: {e}")
+            return None
+    
+    async def _generate_selector(self, element: ElementHandle) -> str:
+        """Generate a CSS selector for an element."""
+        try:
+            selector = await element.evaluate('''el => {
+                if (el.id) return '#' + el.id;
+                if (el.getAttribute('data-testid')) 
+                    return `[data-testid="${el.getAttribute('data-testid')}"]`;
+                
+                let path = [];
+                while (el && el.nodeType === Node.ELEMENT_NODE) {
+                    let selector = el.tagName.toLowerCase();
+                    if (el.id) {
+                        selector = '#' + el.id;
+                        path.unshift(selector);
+                        break;
+                    }
+                    let sibling = el;
+                    let nth = 1;
+                    while (sibling = sibling.previousElementSibling) {
+                        if (sibling.tagName === el.tagName) nth++;
+                    }
+                    if (nth > 1) selector += `:nth-of-type(${nth})`;
+                    path.unshift(selector);
+                    el = el.parentElement;
+                }
+                return path.join(' > ');
+            }''')
+            return selector
+        except:
+            return 'unknown'
+
+
+class BrowserAutomation(IBrowserAutomation):
     """
     Playwright-based browser automation for detecting and interacting with web elements.
+    
+    Follows:
+    - SRP: Core browser automation, delegates to specialized helpers
+    - OCP: Can be extended for different browser engines
+    - DIP: Implements IBrowserAutomation interface
+    - ISP: Interface only declares needed methods
     """
 
     def __init__(self, headless: bool = True, timeout: int = 10000):
@@ -32,6 +174,8 @@ class BrowserAutomation:
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
         self._playwright = None
+        self._cookie_handler: Optional[CookieBannerHandler] = None
+        self._element_extractor: Optional[ElementExtractor] = None
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -55,6 +199,10 @@ class BrowserAutomation:
         )
         self.page = await context.new_page()
         self.page.set_default_timeout(self.timeout)
+        
+        # Initialize helper classes (Composition over inheritance)
+        self._cookie_handler = CookieBannerHandler(self.page)
+        self._element_extractor = ElementExtractor(self.page)
 
     async def close(self):
         """Close the browser."""
@@ -62,6 +210,10 @@ class BrowserAutomation:
             await self.browser.close()
         if self._playwright:
             await self._playwright.stop()
+    
+    async def get_page_content(self) -> str:
+        """Get the current page HTML content."""
+        return await self.page.content()
 
     async def navigate(self, url: str) -> Dict[str, Any]:
         """
@@ -77,8 +229,9 @@ class BrowserAutomation:
         await self.page.goto(url, wait_until='networkidle')
         await asyncio.sleep(2)  # Additional wait for dynamic content
         
-        # Try to dismiss cookie consent banners
-        await self._dismiss_cookie_banners()
+        # Try to dismiss cookie consent banners using helper
+        if self._cookie_handler:
+            await self._cookie_handler.dismiss()
         
         title = await self.page.title()
         current_url = self.page.url
@@ -90,7 +243,12 @@ class BrowserAutomation:
         }
 
     async def _dismiss_cookie_banners(self):
-        """Try to dismiss common cookie consent banners."""
+        """Try to dismiss common cookie consent banners. Delegates to CookieBannerHandler."""
+        if self._cookie_handler:
+            await self._cookie_handler.dismiss()
+            return
+        
+        # Fallback for backward compatibility
         cookie_selectors = [
             '#onetrust-accept-btn-handler',
             '.onetrust-accept-btn-handler',
