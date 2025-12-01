@@ -410,6 +410,16 @@ class BrowserAutomation(IBrowserAutomation):
         logger.info(f"Found {len(hoverable_elements)} potential hoverable elements")
         return hoverable_elements
 
+    async def find_clickable_elements(self) -> List[ElementInfo]:
+        """
+        Find elements that can be clicked (interface method).
+        Delegates to find_clickable_buttons.
+        
+        Returns:
+            List of ElementInfo for clickable elements
+        """
+        return await self.find_clickable_buttons()
+
     async def find_clickable_buttons(self) -> List[ElementInfo]:
         """
         Find buttons that might trigger popups or modals.
