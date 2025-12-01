@@ -4,12 +4,12 @@ An AI-powered automation solution that dynamically generates Gherkin-style BDD t
 
 ## Features
 
-- 🔍 **Dynamic Element Detection**: Automatically detects hoverable elements, popups, dropdowns, and modals
-- 🤖 **AI-Powered Generation**: Uses LLMs (OpenAI GPT-4/Gemini) to generate clean Gherkin scenarios
-- 🌐 **Browser Automation**: Playwright-based automation for simulating user interactions
-- 📝 **Gherkin Output**: Generates well-formatted `.feature` files
-- 🚀 **FastAPI Backend**: REST API for easy integration
-- 🎨 **Streamlit UI**: Optional web interface for easy use
+- **Dynamic Element Detection**: Automatically detects hoverable elements, popups, dropdowns, and modals
+- **AI-Powered Generation**: Uses LLMs (OpenAI GPT-4/Gemini) to generate clean Gherkin scenarios
+- **Browser Automation**: Playwright-based automation for simulating user interactions
+- **Gherkin Output**: Generates well-formatted `.feature` files
+- **FastAPI Backend**: REST API for easy integration
+- **Streamlit UI**: Optional web interface for easy use
 
 ## Project Structure
 
