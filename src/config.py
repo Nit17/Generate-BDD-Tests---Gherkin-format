@@ -20,12 +20,12 @@ class BrowserConfig:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    PAGE_LOAD_WAIT: float = 1.5
-    HOVER_WAIT: float = 0.3
+    PAGE_LOAD_WAIT: float = 3.0  # Increased for dynamic sites
+    HOVER_WAIT: float = 0.5
     CLICK_WAIT: float = 0.5
     POPUP_CLOSE_WAIT: float = 0.3
     BETWEEN_ACTIONS_DELAY: float = 0.2
-    ANIMATION_WAIT: float = 0.3  # Wait for CSS animations
+    ANIMATION_WAIT: float = 0.5  # Wait for CSS animations
 
 
 @dataclass(frozen=True)

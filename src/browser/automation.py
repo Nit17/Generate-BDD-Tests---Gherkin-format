@@ -319,8 +319,18 @@ class BrowserAutomation(IBrowserAutomation):
         logger.info(f"Navigating to: {url}")
         # Use 'domcontentloaded' instead of 'networkidle' to avoid timeout on sites with continuous network activity
         await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
-        # Wait a bit more for dynamic content to load
-        await asyncio.sleep(browser_config.PAGE_LOAD_WAIT + 1)
+        
+        # Wait for page to be fully loaded and JavaScript to execute
+        await asyncio.sleep(browser_config.PAGE_LOAD_WAIT)
+        
+        # Try to wait for network to be idle (but don't fail if it times out)
+        try:
+            await self.page.wait_for_load_state('networkidle', timeout=5000)
+        except Exception:
+            pass  # Some sites never reach network idle
+        
+        # Additional wait for dynamic content
+        await asyncio.sleep(1)
         
         # Dismiss cookie consent banners using helper - try multiple times
         if self._cookie_handler:
@@ -334,7 +344,7 @@ class BrowserAutomation(IBrowserAutomation):
         # Force hide any remaining overlays that might block interaction
         await self.page.evaluate('''() => {
             // Remove any overlay that might be blocking interaction
-            const overlays = document.querySelectorAll('[class*="consent"], [class*="cookie"], [class*="overlay"], [id*="consent"], [id*="cookie"]');
+            const overlays = document.querySelectorAll('[class*="consent"], [class*="cookie"], [class*="overlay"], [id*="consent"], [id*="cookie"], [class*="popup"], [class*="modal"]');
             overlays.forEach(el => {
                 const style = window.getComputedStyle(el);
                 if (style.position === 'fixed' || style.position === 'absolute') {
@@ -444,15 +454,28 @@ class BrowserAutomation(IBrowserAutomation):
             // Find all links in nav, header, or with nav-related classes
             const selectors = [
                 'nav a',
+                'nav button',
                 'header a',
+                'header button',
                 '[role="navigation"] a',
+                '[role="navigation"] button',
+                '[role="menubar"] > *',
+                '[role="menu"] a',
                 '[class*="nav"] a',
+                '[class*="nav"] button',
                 '[class*="menu"] a',
+                '[class*="menu"] button',
+                '[class*="gnb"] a',
+                '[class*="gnb"] button',
+                '[class*="header"] a',
+                '[class*="header"] button',
                 'a[class*="nav"]',
                 'a[class*="menu"]',
                 '.navigation a',
                 '.main-menu a',
-                '.header a'
+                '.header a',
+                '[data-nav] a',
+                '[data-menu] a'
             ];
             
             for (const selector of selectors) {
@@ -460,15 +483,16 @@ class BrowserAutomation(IBrowserAutomation):
                     const elements = document.querySelectorAll(selector);
                     for (const el of elements) {
                         const rect = el.getBoundingClientRect();
-                        if (rect.width === 0 || rect.height === 0) continue;
+                        if (rect.width < 10 || rect.height < 10) continue;
                         
                         const style = window.getComputedStyle(el);
                         if (style.display === 'none' || style.visibility === 'hidden') continue;
+                        if (parseFloat(style.opacity) < 0.1) continue;
                         
                         const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                        if (!text || text.length > 50) continue;
+                        if (!text || text.length > 100) continue;
                         
-                        const textKey = text.toLowerCase();
+                        const textKey = text.toLowerCase().substring(0, 30);
                         if (seen.has(textKey)) continue;
                         seen.add(textKey);
                         
@@ -565,14 +589,18 @@ class BrowserAutomation(IBrowserAutomation):
         """Find elements that became visible after hover."""
         revealed = []
         try:
+            # Use dynamic selectors that don't depend on parent_selector (which may be invalid for CSS)
             # Look for dropdown menus, submenus, and revealed content
             selectors = [
-                f'{parent_selector} ~ ul', f'{parent_selector} ~ div',
-                f'{parent_selector} + ul', f'{parent_selector} + div',
-                '.dropdown-menu:visible', '.submenu:visible',
+                '.dropdown-menu',
+                '.submenu',
                 '[class*="dropdown"]:not([style*="display: none"])',
                 '[class*="submenu"]:not([style*="display: none"])',
-                '[aria-expanded="true"] + *'
+                '[class*="menu"]:not([style*="display: none"])',
+                '[aria-expanded="true"] + *',
+                '[aria-expanded="true"] ~ ul',
+                '[role="menu"]',
+                'nav ul ul'
             ]
             
             for selector in selectors:
@@ -595,18 +623,14 @@ class BrowserAutomation(IBrowserAutomation):
         """Find links that became visible after hover."""
         links = []
         try:
-            # Look for links in dropdown areas
-            visible_links = await self.page.evaluate('''(parentSelector) => {
+            # Look for links in dropdown areas using dynamic detection
+            # Note: parent_selector may be a Playwright selector like text="..." which is not valid for querySelector
+            visible_links = await self.page.evaluate('''() => {
                 const links = [];
-                const parent = document.querySelector(parentSelector);
-                if (!parent) return links;
                 
-                // Find nearby dropdown/submenu containers
+                // Find all visible dropdown/submenu containers dynamically
                 const containers = [
-                    parent.nextElementSibling,
-                    parent.querySelector('ul, div'),
-                    parent.parentElement?.querySelector('ul, div'),
-                    ...document.querySelectorAll('.dropdown-menu, .submenu, [class*="dropdown"]')
+                    ...document.querySelectorAll('.dropdown-menu, .submenu, [class*="dropdown"], [class*="nav"] ul, nav ul, [role="menu"], [aria-expanded="true"] + *, [aria-expanded="true"] ~ *')
                 ];
                 
                 for (const container of containers) {
@@ -624,7 +648,7 @@ class BrowserAutomation(IBrowserAutomation):
                     }
                 }
                 return links.slice(0, 10);
-            }''', parent_selector)
+            }''')
             
             links = visible_links or []
         except Exception as e:
@@ -650,7 +674,12 @@ class BrowserAutomation(IBrowserAutomation):
             element = await self.page.query_selector(element_info.selector)
             if not element:
                 if element_info.text_content:
-                    element = await self.page.get_by_text(element_info.text_content, exact=False).first
+                    # get_by_text returns a Locator, need to use element_handle() to get ElementHandle
+                    locator = self.page.get_by_text(element_info.text_content, exact=False).first
+                    try:
+                        element = await locator.element_handle(timeout=2000)
+                    except:
+                        element = None
             
             if not element:
                 return None

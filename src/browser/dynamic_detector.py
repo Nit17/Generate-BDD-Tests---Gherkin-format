@@ -188,41 +188,49 @@ class DynamicElementDetector:
             const results = [];
             const seen = new Set();
             
-            // Get all visible anchor and button elements
-            const elements = document.querySelectorAll('a, button, [role="button"], [role="menuitem"], li');
+            // Get all visible anchor and button elements - expanded selectors for complex sites
+            const elements = document.querySelectorAll(`
+                a, button, [role="button"], [role="menuitem"], [role="tab"],
+                li, [class*="nav"] > *, [class*="menu"] > *, [class*="gnb"] > *,
+                nav > *, header a, header button, [data-nav], [data-menu]
+            `.replace(/\\s+/g, ' '));
             
             for (const el of elements) {
                 const rect = el.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) continue;
+                if (rect.width < 10 || rect.height < 10) continue;
                 
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden') continue;
+                if (parseFloat(style.opacity) < 0.1) continue;
                 
                 const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                const textKey = text.toLowerCase().substring(0, 50);
+                const textKey = text.toLowerCase().substring(0, 30);
                 
-                if (!text || seen.has(textKey)) continue;
+                if (!text || text.length > 100 || seen.has(textKey)) continue;
                 seen.add(textKey);
                 
                 // Check for hover-related indicators
                 const hasHoverIndicators = (
                     // Has children or siblings that might be dropdowns
-                    el.querySelector('ul, div, [class*="sub"], [class*="drop"]') !== null ||
-                    el.nextElementSibling?.matches?.('ul, div, [class*="menu"]') ||
+                    el.querySelector('ul, div, [class*="sub"], [class*="drop"], [class*="depth"]') !== null ||
+                    el.nextElementSibling?.matches?.('ul, div, [class*="menu"], [class*="sub"]') ||
                     // Parent has dropdown-related structure
-                    el.parentElement?.querySelector?.(':scope > ul, :scope > div')?.children?.length > 0 ||
+                    el.parentElement?.querySelector?.(':scope > ul, :scope > div, :scope > [class*="sub"]')?.children?.length > 0 ||
                     // ARIA indicators
                     el.hasAttribute('aria-haspopup') ||
                     el.hasAttribute('aria-expanded') ||
-                    // Common hover patterns
-                    el.closest('[class*="nav"], [class*="menu"], nav, header') !== null
+                    el.hasAttribute('aria-controls') ||
+                    // Common hover patterns - in navigation context
+                    el.closest('[class*="nav"], [class*="menu"], [class*="gnb"], nav, header') !== null ||
+                    // Cursor pointer suggests interactivity
+                    style.cursor === 'pointer'
                 );
                 
                 // Generate selector
                 let selector = '';
                 if (el.id) {
                     selector = '#' + el.id;
-                } else if (text) {
+                } else if (text && text.length <= 50) {
                     selector = `text="${text.substring(0, 50)}"`;
                 } else {
                     const tagName = el.tagName.toLowerCase();
