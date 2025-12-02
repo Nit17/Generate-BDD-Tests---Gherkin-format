@@ -1,17 +1,26 @@
 """
 LLM Providers module.
 Each provider class has a single responsibility (SRP).
+Includes response caching to reduce API calls.
 """
 
 import logging
+import hashlib
 from ..interfaces.llm import ILLMProvider
+from ..utils.cache import llm_cache
 
 logger = logging.getLogger(__name__)
 
 
+def _generate_cache_key(provider: str, model: str, prompt: str) -> str:
+    """Generate a cache key from provider, model, and prompt."""
+    content = f"{provider}:{model}:{prompt}"
+    return hashlib.sha256(content.encode()).hexdigest()[:32]
+
+
 class OpenAIProvider(ILLMProvider):
     """
-    OpenAI GPT provider implementation.
+    OpenAI GPT provider implementation with caching.
     
     Follows:
     - SRP: Only handles OpenAI API communication
@@ -37,7 +46,14 @@ class OpenAIProvider(ILLMProvider):
         return self._model
     
     async def generate(self, prompt: str) -> str:
-        """Generate response using OpenAI API."""
+        """Generate response using OpenAI API with caching."""
+        # Check cache first
+        cache_key = _generate_cache_key(self._provider_name, self._model, prompt)
+        cached = llm_cache.get(cache_key)
+        if cached is not None:
+            logger.info("Using cached LLM response")
+            return cached
+        
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[
@@ -54,12 +70,16 @@ class OpenAIProvider(ILLMProvider):
             temperature=0.3,
             max_tokens=4000
         )
-        return response.choices[0].message.content
+        result = response.choices[0].message.content
+        
+        # Cache the response
+        llm_cache.put(cache_key, result)
+        return result
 
 
 class GeminiProvider(ILLMProvider):
     """
-    Google Gemini provider implementation.
+    Google Gemini provider implementation with caching.
     
     Follows:
     - SRP: Only handles Gemini API communication
@@ -89,7 +109,14 @@ class GeminiProvider(ILLMProvider):
         return self._model
     
     async def generate(self, prompt: str) -> str:
-        """Generate response using Gemini API."""
+        """Generate response using Gemini API with caching."""
+        # Check cache first
+        cache_key = _generate_cache_key(self._provider_name, self._model, prompt)
+        cached = llm_cache.get(cache_key)
+        if cached is not None:
+            logger.info("Using cached LLM response")
+            return cached
+        
         system_prompt = (
             "You are an expert QA engineer specializing in BDD testing "
             "and Gherkin syntax. Generate clean, well-formatted Gherkin "
@@ -98,7 +125,11 @@ class GeminiProvider(ILLMProvider):
         response = await self._model_instance.generate_content_async(
             system_prompt + prompt
         )
-        return response.text
+        result = response.text
+        
+        # Cache the response
+        llm_cache.put(cache_key, result)
+        return result
 
 
 class MockLLMProvider(ILLMProvider):

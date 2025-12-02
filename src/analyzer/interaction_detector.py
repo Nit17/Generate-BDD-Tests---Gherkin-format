@@ -9,7 +9,7 @@ Follows SOLID principles:
 """
 
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import logging
 
 from ..interfaces.analyzer import IInteractionDetector
@@ -20,9 +20,14 @@ from ..models.schemas import (
     ElementInfo, InteractionType
 )
 from .dom_analyzer import DOMAnalyzer
+from ..config import detector_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Concurrency control for parallel operations
+MAX_CONCURRENT_HOVERS = detector_config.MAX_HOVER_ELEMENTS
+MAX_CONCURRENT_CLICKS = detector_config.MAX_POPUP_BUTTONS
 
 
 class InteractionDetector(IInteractionDetector):
@@ -109,10 +114,10 @@ class InteractionDetector(IInteractionDetector):
         dom_analyzer: DOMAnalyzer
     ) -> List[HoverInteraction]:
         """
-        Detect all hover-based interactions on the page.
+        Detect all hover-based interactions on the page using parallel execution.
+        Uses semaphore to control concurrency.
         """
-        logger.info("Detecting hover interactions...")
-        interactions = []
+        logger.info("Detecting hover interactions with parallel execution...")
         
         # Get hoverable elements from browser
         hoverable_elements = await browser.find_hoverable_elements()
@@ -120,35 +125,24 @@ class InteractionDetector(IInteractionDetector):
         # Get dropdown info from DOM analysis
         dropdown_info = dom_analyzer.find_dropdown_containers()
         
-        # Combine information and test hovers
+        # Build list of unique elements to test
+        elements_to_test: List[ElementInfo] = []
         tested_texts = set()
         
-        for element in hoverable_elements[:15]:  # Limit to prevent long runs
+        # Add browser-detected hoverable elements
+        for element in hoverable_elements[:MAX_CONCURRENT_HOVERS]:
             if not element.text_content:
                 continue
-                
             text_key = element.text_content.strip().lower()[:30]
-            if text_key in tested_texts:
-                continue
-            tested_texts.add(text_key)
-            
-            logger.info(f"Testing hover on: {element.text_content[:50]}")
-            
-            interaction = await browser.simulate_hover(element)
-            if interaction and (interaction.revealed_elements or interaction.revealed_links):
-                interactions.append(interaction)
-                logger.info(f"  Found {len(interaction.revealed_links)} revealed links")
-            
-            # Small delay between hovers
-            await asyncio.sleep(0.3)
+            if text_key not in tested_texts:
+                tested_texts.add(text_key)
+                elements_to_test.append(element)
         
-        # Also test dropdown triggers from DOM analysis
-        for dropdown in dropdown_info[:5]:
+        # Add dropdown triggers from DOM analysis
+        for dropdown in dropdown_info[:detector_config.MAX_DROPDOWN_TRIGGERS]:
             trigger_text = dropdown.get('trigger_text', '')
             if trigger_text and trigger_text.lower()[:30] not in tested_texts:
                 tested_texts.add(trigger_text.lower()[:30])
-                
-                # Create element info for the dropdown trigger
                 trigger_element = ElementInfo(
                     selector=f'text="{trigger_text}"',
                     tag_name='a',
@@ -156,16 +150,33 @@ class InteractionDetector(IInteractionDetector):
                     classes=[],
                     attributes={}
                 )
-                
-                interaction = await browser.simulate_hover(trigger_element)
-                if interaction:
-                    # Enhance with DOM analysis data
-                    for item in dropdown.get('items', []):
-                        if not any(l.get('text') == item['text'] for l in interaction.revealed_links):
-                            interaction.revealed_links.append(item)
-                    
-                    if interaction.revealed_links:
-                        interactions.append(interaction)
+                elements_to_test.append(trigger_element)
+        
+        # Test hovers in parallel with controlled concurrency
+        semaphore = asyncio.Semaphore(3)  # Max 3 concurrent hover tests
+        
+        async def test_hover_with_semaphore(element: ElementInfo) -> Optional[HoverInteraction]:
+            async with semaphore:
+                logger.info(f"Testing hover on: {element.text_content[:50]}")
+                interaction = await browser.simulate_hover(element)
+                if interaction and (interaction.revealed_elements or interaction.revealed_links):
+                    logger.info(f"  Found {len(interaction.revealed_links)} revealed links")
+                    return interaction
+                return None
+        
+        # Run all hover tests in parallel
+        results = await asyncio.gather(
+            *[test_hover_with_semaphore(el) for el in elements_to_test],
+            return_exceptions=True
+        )
+        
+        # Collect successful interactions
+        interactions = []
+        for result in results:
+            if isinstance(result, HoverInteraction):
+                interactions.append(result)
+            elif isinstance(result, Exception):
+                logger.warning(f"Hover test failed: {result}")
         
         logger.info(f"Detected {len(interactions)} hover interactions")
         return interactions
@@ -176,10 +187,9 @@ class InteractionDetector(IInteractionDetector):
         dom_analyzer: DOMAnalyzer
     ) -> List[PopupInteraction]:
         """
-        Detect all popup/modal interactions on the page.
+        Detect all popup/modal interactions on the page using parallel execution.
         """
-        logger.info("Detecting popup interactions...")
-        interactions = []
+        logger.info("Detecting popup interactions with parallel execution...")
         
         # Get clickable buttons from browser
         buttons = await browser.find_clickable_buttons()
@@ -187,10 +197,15 @@ class InteractionDetector(IInteractionDetector):
         # Get modal triggers from DOM analysis
         modal_triggers = dom_analyzer.find_modal_triggers()
         
+        # Keywords that indicate popup-triggering buttons
+        POPUP_KEYWORDS = detector_config.POPUP_KEYWORDS
+        
+        # Build list of elements to test
+        elements_to_test: List[ElementInfo] = []
         tested_texts = set()
         
-        # Test buttons that might trigger popups
-        for button in buttons[:10]:  # Limit
+        # Filter buttons likely to trigger popups
+        for button in buttons[:MAX_CONCURRENT_CLICKS]:
             if not button.text_content:
                 continue
             
@@ -199,38 +214,25 @@ class InteractionDetector(IInteractionDetector):
             
             if text_key in tested_texts:
                 continue
-            tested_texts.add(text_key)
             
-            # Prioritize buttons likely to trigger popups
-            likely_popup = any(keyword in text.lower() for keyword in [
-                'learn more', 'read more', 'continue', 'submit', 
-                'sign up', 'subscribe', 'contact', 'external'
-            ])
-            
-            # Check if it's in modal triggers
+            # Check if likely to trigger popup
+            likely_popup = any(keyword in text.lower() for keyword in POPUP_KEYWORDS)
             is_modal_trigger = any(
                 t.get('text', '').lower() == text.lower() 
                 for t in modal_triggers
             )
             
             if likely_popup or is_modal_trigger:
-                logger.info(f"Testing click on: {text[:50]}")
-                
-                interaction = await browser.simulate_click_for_popup(button)
-                if interaction and interaction.popup_title:
-                    interactions.append(interaction)
-                    logger.info(f"  Found popup: {interaction.popup_title[:50]}")
-                
-                await asyncio.sleep(0.5)
+                tested_texts.add(text_key)
+                elements_to_test.append(button)
         
-        # Test external links that might show leaving warnings
-        for trigger in modal_triggers[:5]:
+        # Add external links that might show leaving warnings
+        for trigger in modal_triggers[:detector_config.MAX_MODAL_TRIGGERS]:
             text = trigger.get('text', '')
             if trigger.get('type') == 'external_link' and text:
                 text_key = text.lower()[:30]
                 if text_key not in tested_texts:
                     tested_texts.add(text_key)
-                    
                     trigger_element = ElementInfo(
                         selector=f'text="{text}"',
                         tag_name='a',
@@ -238,10 +240,34 @@ class InteractionDetector(IInteractionDetector):
                         classes=[],
                         attributes={'href': trigger.get('href', '')}
                     )
-                    
-                    interaction = await browser.simulate_click_for_popup(trigger_element)
-                    if interaction:
-                        interactions.append(interaction)
+                    elements_to_test.append(trigger_element)
+        
+        # Test clicks in parallel with controlled concurrency
+        semaphore = asyncio.Semaphore(2)  # Max 2 concurrent click tests (popups need more isolation)
+        
+        async def test_click_with_semaphore(element: ElementInfo) -> Optional[PopupInteraction]:
+            async with semaphore:
+                text = element.text_content[:50] if element.text_content else "unknown"
+                logger.info(f"Testing click on: {text}")
+                interaction = await browser.simulate_click_for_popup(element)
+                if interaction and interaction.popup_title:
+                    logger.info(f"  Found popup: {interaction.popup_title[:50]}")
+                    return interaction
+                return None
+        
+        # Run all click tests in parallel
+        results = await asyncio.gather(
+            *[test_click_with_semaphore(el) for el in elements_to_test],
+            return_exceptions=True
+        )
+        
+        # Collect successful interactions
+        interactions = []
+        for result in results:
+            if isinstance(result, PopupInteraction):
+                interactions.append(result)
+            elif isinstance(result, Exception):
+                logger.warning(f"Click test failed: {result}")
         
         logger.info(f"Detected {len(interactions)} popup interactions")
         return interactions
