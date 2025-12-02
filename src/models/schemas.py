@@ -1,8 +1,16 @@
 """Pydantic models for data schemas."""
 
+import re
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+
+
+def clean_whitespace(text: Optional[str]) -> Optional[str]:
+    """Normalize whitespace in text: replace multiple spaces/newlines with single space."""
+    if text is None:
+        return None
+    return re.sub(r'\s+', ' ', text).strip() or None
 
 
 class InteractionType(str, Enum):
@@ -26,6 +34,12 @@ class ElementInfo(BaseModel):
     attributes: Dict[str, str] = Field(default_factory=dict, description="Relevant attributes")
     bounding_box: Optional[Dict[str, float]] = Field(None, description="Element position and size")
 
+    @field_validator('text_content', mode='before')
+    @classmethod
+    def normalize_text_content(cls, v):
+        """Clean whitespace from text content."""
+        return clean_whitespace(v)
+
 
 class HoverInteraction(BaseModel):
     """Represents a hover interaction and its result."""
@@ -44,6 +58,12 @@ class PopupInteraction(BaseModel):
     close_button: Optional[ElementInfo] = Field(None, description="Close button if present")
     redirect_url: Optional[str] = Field(None, description="URL redirected to after action")
     interaction_type: InteractionType = Field(default=InteractionType.POPUP_MODAL)
+
+    @field_validator('popup_title', 'popup_content', mode='before')
+    @classmethod
+    def normalize_popup_text(cls, v):
+        """Clean whitespace from popup text."""
+        return clean_whitespace(v)
 
 
 class PageAnalysis(BaseModel):

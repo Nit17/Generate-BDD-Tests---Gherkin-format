@@ -78,9 +78,10 @@ class ElementExtractor:
         """Extract information from an element handle."""
         try:
             # Batch evaluate for better performance
+            # Use replace with regex to normalize all whitespace to single spaces
             info = await element.evaluate('''el => ({
                 tagName: el.tagName.toLowerCase(),
-                textContent: el.textContent?.trim()?.substring(0, 200) || "",
+                textContent: (el.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 200),
                 ariaLabel: el.getAttribute('aria-label'),
                 role: el.getAttribute('role'),
                 classes: (el.getAttribute('class') || '').split(' ').filter(c => c).slice(0, 10),
@@ -468,7 +469,7 @@ class BrowserAutomation(IBrowserAutomation):
                     if (rect.width > 0 && rect.height > 0) {
                         const anchors = container.querySelectorAll('a');
                         anchors.forEach(a => {
-                            const text = a.textContent?.trim();
+                            const text = (a.textContent || "").replace(/\\s+/g, " ").trim();
                             const href = a.href;
                             if (text && href && !links.some(l => l.text === text)) {
                                 links.push({ text: text.substring(0, 100), href });
@@ -571,8 +572,8 @@ class BrowserAutomation(IBrowserAutomation):
                             const title = el.querySelector('h1, h2, h3, .modal-title, .popup-title, [class*="title"]');
                             const content = el.querySelector('.modal-body, .popup-content, p');
                             return {
-                                title: title?.textContent?.trim()?.substring(0, 200) || '',
-                                content: content?.textContent?.trim()?.substring(0, 500) || ''
+                                title: (title?.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 200),
+                                content: (content?.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 500)
                             };
                         }
                     }
@@ -592,7 +593,7 @@ class BrowserAutomation(IBrowserAutomation):
                 
                 const btns = popup.querySelectorAll('button, a.btn, .btn, [role="button"]');
                 return Array.from(btns).map(btn => ({
-                    text: btn.textContent?.trim()?.substring(0, 50) || '',
+                    text: (btn.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 50),
                     type: btn.getAttribute('type') || 'button'
                 })).filter(b => b.text).slice(0, 5);
             }''')
@@ -642,7 +643,7 @@ class BrowserAutomation(IBrowserAutomation):
                 navElements.forEach(nav => {
                     const links = nav.querySelectorAll('a');
                     links.forEach(link => {
-                        const text = link.textContent?.trim();
+                        const text = (link.textContent || "").replace(/\\s+/g, " ").trim();
                         const href = link.href;
                         if (text && text.length < 50) {
                             navItems.push({
