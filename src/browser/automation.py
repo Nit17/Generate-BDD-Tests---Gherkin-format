@@ -258,11 +258,28 @@ class BrowserAutomation(IBrowserAutomation):
 
     async def start(self):
         """Start the browser with optimized settings."""
-        self._playwright = await async_playwright().start()
-        self.browser = await self._playwright.chromium.launch(
-            headless=self.headless,
-            args=['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process']
-        )
+        try:
+            self._playwright = await async_playwright().start()
+            self.browser = await self._playwright.chromium.launch(
+                headless=self.headless,
+                args=['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process']
+            )
+        except Exception as e:
+            error_msg = str(e)
+            if "Executable doesn't exist" in error_msg or "playwright install" in error_msg.lower():
+                raise RuntimeError(
+                    "Playwright browsers are not installed. Please run:\n\n"
+                    "    playwright install chromium\n\n"
+                    "If you're on a server/cloud environment, you may also need:\n\n"
+                    "    playwright install-deps chromium\n\n"
+                    "For Streamlit Cloud, add to packages.txt:\n"
+                    "    libnss3\n    libatk1.0-0\n    libatk-bridge2.0-0\n"
+                    "    libcups2\n    libdrm2\n    libxkbcommon0\n    libxcomposite1\n"
+                    "    libxdamage1\n    libxfixes3\n    libxrandr2\n    libgbm1\n"
+                    "    libasound2\n"
+                ) from e
+            raise
+        
         context = await self.browser.new_context(
             viewport={
                 'width': browser_config.VIEWPORT_WIDTH, 

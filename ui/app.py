@@ -7,6 +7,7 @@ import streamlit as st
 import asyncio
 import sys
 import os
+import subprocess
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,6 +15,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.analyzer.interaction_detector import InteractionDetector
 from src.llm.gherkin_generator import GherkinGenerator
 from src.output.feature_writer import FeatureWriter
+
+
+def install_playwright_browsers():
+    """Install Playwright browsers if not already installed."""
+    try:
+        # Check if browsers are installed by trying to import and check
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            # Try to get executable path - will fail if not installed
+            p.chromium.executable_path
+    except Exception:
+        # Browsers not installed, install them
+        st.info("Installing Playwright browsers (first-time setup)...")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=True,
+                capture_output=True
+            )
+            st.success("Playwright browsers installed successfully!")
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to install Playwright browsers: {e.stderr.decode() if e.stderr else str(e)}")
+            st.info("Please run manually: `playwright install chromium`")
+            return False
+    return True
 
 
 def run_async(coro):
@@ -40,6 +66,13 @@ def main():
     - **Hover interactions** (dropdowns, menus, tooltips)
     - **Popup/Modal interactions** (dialogs, confirmation prompts)
     """)
+    
+    # Check for Playwright browsers on first run
+    if 'playwright_checked' not in st.session_state:
+        if not install_playwright_browsers():
+            st.error("Cannot proceed without Playwright browsers. Please install them manually.")
+            st.stop()
+        st.session_state.playwright_checked = True
     
     # Sidebar configuration
     st.sidebar.header("Configuration")
