@@ -19,27 +19,36 @@ from src.output.feature_writer import FeatureWriter
 
 def install_playwright_browsers():
     """Install Playwright browsers if not already installed."""
+    # Check if already installed by looking for the browser executable
+    playwright_cache = os.path.expanduser("~/.cache/ms-playwright")
+    chromium_installed = os.path.exists(playwright_cache) and any(
+        "chromium" in d for d in os.listdir(playwright_cache) if os.path.isdir(os.path.join(playwright_cache, d))
+    ) if os.path.exists(playwright_cache) else False
+    
+    if chromium_installed:
+        return True
+    
+    # Browsers not installed, install them
+    st.info("Installing Playwright browsers (first-time setup, please wait)...")
     try:
-        # Check if browsers are installed by trying to import and check
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            # Try to get executable path - will fail if not installed
-            p.chromium.executable_path
-    except Exception:
-        # Browsers not installed, install them
-        st.info("Installing Playwright browsers (first-time setup)...")
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "playwright", "install", "chromium"],
-                check=True,
-                capture_output=True
-            )
-            st.success("Playwright browsers installed successfully!")
-        except subprocess.CalledProcessError as e:
-            st.error(f"Failed to install Playwright browsers: {e.stderr.decode() if e.stderr else str(e)}")
-            st.info("Please run manually: `playwright install chromium`")
-            return False
-    return True
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=True,
+            capture_output=True,
+            timeout=120  # 2 minute timeout
+        )
+        st.success("Playwright browsers installed successfully!")
+        return True
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        st.error(f"Failed to install Playwright browsers: {error_msg}")
+        return False
+    except subprocess.TimeoutExpired:
+        st.error("Playwright installation timed out. Please try again.")
+        return False
+    except Exception as e:
+        st.error(f"Unexpected error installing Playwright: {str(e)}")
+        return False
 
 
 def run_async(coro):
