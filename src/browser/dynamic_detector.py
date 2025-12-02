@@ -20,6 +20,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _filter_none_values(d: Dict[str, Any]) -> Dict[str, str]:
+    """Filter out None values from a dictionary and convert to strings."""
+    return {k: str(v) for k, v in d.items() if v is not None}
+
+
 class DynamicElementDetector:
     """
     Detects interactive elements dynamically through behavior analysis.
@@ -157,11 +162,11 @@ class DynamicElementDetector:
                 aria_label=item.get('ariaLabel'),
                 role=item.get('role'),
                 classes=item.get('classes', []),
-                attributes={
+                attributes=_filter_none_values({
                     'href': item.get('href'),
-                    'has_popup': str(item.get('hasPopup', False)),
+                    'has_popup': item.get('hasPopup', False),
                     'is_expanded': item.get('isExpanded')
-                },
+                }),
                 bounding_box=item.get('rect')
             ))
         
@@ -250,6 +255,11 @@ class DynamicElementDetector:
         
         elements = []
         for item in hover_candidates:
+            # Only include href in attributes if it exists
+            attrs = {}
+            if item.get('href'):
+                attrs['href'] = item['href']
+            
             elements.append(ElementInfo(
                 selector=item['selector'],
                 tag_name=item['tagName'],
@@ -257,7 +267,7 @@ class DynamicElementDetector:
                 aria_label=item.get('ariaLabel'),
                 role=item.get('role'),
                 classes=item.get('classes', []),
-                attributes={'href': item.get('href')},
+                attributes=attrs,
                 bounding_box=item.get('rect')
             ))
         
@@ -358,10 +368,10 @@ class DynamicElementDetector:
                 aria_label=item.get('ariaLabel'),
                 role=item.get('role'),
                 classes=item.get('classes', []),
-                attributes={
+                attributes=_filter_none_values({
                     'href': item.get('href'),
                     'type': item.get('type')
-                },
+                }),
                 bounding_box=item.get('rect')
             ))
         

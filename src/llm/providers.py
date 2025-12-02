@@ -49,7 +49,7 @@ class OpenAIProvider(ILLMProvider):
         """Generate response using OpenAI API with caching."""
         # Check cache first
         cache_key = _generate_cache_key(self._provider_name, self._model, prompt)
-        cached = llm_cache.get(cache_key)
+        cached = await llm_cache.get(cache_key)
         if cached is not None:
             logger.info("Using cached LLM response")
             return cached
@@ -73,7 +73,7 @@ class OpenAIProvider(ILLMProvider):
         result = response.choices[0].message.content
         
         # Cache the response
-        llm_cache.put(cache_key, result)
+        await llm_cache.set(cache_key, result)
         return result
 
 
@@ -112,7 +112,7 @@ class GeminiProvider(ILLMProvider):
         """Generate response using Gemini API with caching."""
         # Check cache first
         cache_key = _generate_cache_key(self._provider_name, self._model, prompt)
-        cached = llm_cache.get(cache_key)
+        cached = await llm_cache.get(cache_key)
         if cached is not None:
             logger.info("Using cached LLM response")
             return cached
@@ -128,7 +128,7 @@ class GeminiProvider(ILLMProvider):
         result = response.text
         
         # Cache the response
-        llm_cache.put(cache_key, result)
+        await llm_cache.set(cache_key, result)
         return result
 
 

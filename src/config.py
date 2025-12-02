@@ -20,12 +20,12 @@ class BrowserConfig:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    PAGE_LOAD_WAIT: float = 2.0
-    HOVER_WAIT: float = 0.5
-    CLICK_WAIT: float = 1.0
-    POPUP_CLOSE_WAIT: float = 0.5
-    BETWEEN_ACTIONS_DELAY: float = 0.3
-    ANIMATION_WAIT: float = 0.5  # Wait for CSS animations
+    PAGE_LOAD_WAIT: float = 1.5
+    HOVER_WAIT: float = 0.3
+    CLICK_WAIT: float = 0.5
+    POPUP_CLOSE_WAIT: float = 0.3
+    BETWEEN_ACTIONS_DELAY: float = 0.2
+    ANIMATION_WAIT: float = 0.3  # Wait for CSS animations
 
 
 @dataclass(frozen=True)
@@ -34,23 +34,25 @@ class DetectorConfig:
     Dynamic element detection configuration.
     These are behavior thresholds, NOT hardcoded selectors.
     """
-    # Element limits to prevent overwhelming
-    MAX_INTERACTIVE_ELEMENTS: int = 100
-    MAX_HOVER_ELEMENTS: int = 50
-    MAX_HOVERABLE_ELEMENTS: int = 50  # Alias
-    MAX_CLICKABLE_ELEMENTS: int = 50
-    MAX_POPUP_BUTTONS: int = 10
-    MAX_CLICKABLE_BUTTONS: int = 10  # Alias
-    MAX_NAV_ITEMS: int = 30
-    MAX_REVEALED_LINKS: int = 20
+    # Element limits to prevent overwhelming (lower = faster)
+    MAX_INTERACTIVE_ELEMENTS: int = 30
+    MAX_HOVER_ELEMENTS: int = 15
+    MAX_HOVERABLE_ELEMENTS: int = 15  # Alias
+    MAX_CLICKABLE_ELEMENTS: int = 20
+    MAX_POPUP_BUTTONS: int = 5
+    MAX_CLICKABLE_BUTTONS: int = 5  # Alias
+    MAX_NAV_ITEMS: int = 15
+    MAX_REVEALED_LINKS: int = 10
+    MAX_DROPDOWN_TRIGGERS: int = 10  # Max dropdown triggers to test
+    MAX_MODAL_TRIGGERS: int = 10  # Max modal/popup triggers to test
     
     # Text limits
     TEXT_CONTENT_MAX_LENGTH: int = 200
     MAX_CSS_CLASSES: int = 10
     
-    # Concurrency limits for parallel testing
-    CONCURRENT_HOVER_LIMIT: int = 3
-    CONCURRENT_CLICK_LIMIT: int = 2
+    # Concurrency limits for parallel testing (higher = faster)
+    CONCURRENT_HOVER_LIMIT: int = 5
+    CONCURRENT_CLICK_LIMIT: int = 3
     
     # Behavior detection thresholds
     MIN_ELEMENT_WIDTH: int = 10  # Min width to consider visible

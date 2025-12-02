@@ -121,9 +121,17 @@ class InteractionDetector(IInteractionDetector):
         
         # Get hoverable elements from browser
         hoverable_elements = await browser.find_hoverable_elements()
+        logger.info(f"Found {len(hoverable_elements)} hoverable elements from browser")
         
         # Get dropdown info from DOM analysis
         dropdown_info = dom_analyzer.find_dropdown_containers()
+        logger.info(f"Found {len(dropdown_info)} dropdowns from DOM analysis")
+        
+        # Fallback: Get nav elements directly from page if nothing found
+        if not hoverable_elements and not dropdown_info:
+            logger.info("No elements found, trying direct nav detection...")
+            hoverable_elements = await browser.find_nav_elements_fallback()
+            logger.info(f"Fallback found {len(hoverable_elements)} nav elements")
         
         # Build list of unique elements to test
         elements_to_test: List[ElementInfo] = []

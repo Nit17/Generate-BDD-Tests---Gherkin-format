@@ -31,7 +31,7 @@ class ElementInfo(BaseModel):
     aria_label: Optional[str] = Field(None, description="ARIA label if present")
     role: Optional[str] = Field(None, description="ARIA role if present")
     classes: List[str] = Field(default_factory=list, description="CSS classes")
-    attributes: Dict[str, str] = Field(default_factory=dict, description="Relevant attributes")
+    attributes: Dict[str, Optional[str]] = Field(default_factory=dict, description="Relevant attributes")
     bounding_box: Optional[Dict[str, float]] = Field(None, description="Element position and size")
 
     @field_validator('text_content', mode='before')

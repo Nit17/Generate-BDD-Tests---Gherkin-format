@@ -41,6 +41,26 @@ class CookieBannerHandler:
         Returns True if dismissed.
         """
         dismissed = await self.page.evaluate('''() => {
+            // First try to find and click common accept buttons
+            const acceptSelectors = [
+                '#onetrust-accept-btn-handler',
+                '[id*="accept"]',
+                '[id*="consent"]',
+                'button[aria-label*="accept" i]',
+                'button[aria-label*="agree" i]',
+                '.onetrust-close-btn-handler'
+            ];
+            
+            for (const selector of acceptSelectors) {
+                try {
+                    const btn = document.querySelector(selector);
+                    if (btn && btn.offsetParent !== null) {
+                        btn.click();
+                        return true;
+                    }
+                } catch (e) {}
+            }
+            
             // Find any fixed/overlay element that might be a cookie banner
             const allElements = document.querySelectorAll('*');
             
@@ -95,6 +115,15 @@ class CookieBannerHandler:
         if dismissed:
             logger.info("Dismissed cookie banner using dynamic detection")
             await asyncio.sleep(browser_config.POPUP_CLOSE_WAIT)
+            
+            # Also try to hide any remaining overlay
+            await self.page.evaluate('''() => {
+                // Hide OneTrust dark filter if present
+                const overlays = document.querySelectorAll('.onetrust-pc-dark-filter, #onetrust-consent-sdk, [class*="consent-overlay"]');
+                overlays.forEach(el => {
+                    el.style.display = 'none';
+                });
+            }''')
         
         return dismissed
 
@@ -271,12 +300,31 @@ class BrowserAutomation(IBrowserAutomation):
             Page metadata including title and URL
         """
         logger.info(f"Navigating to: {url}")
-        await self.page.goto(url, wait_until='networkidle')
-        await asyncio.sleep(browser_config.PAGE_LOAD_WAIT)
+        # Use 'domcontentloaded' instead of 'networkidle' to avoid timeout on sites with continuous network activity
+        await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
+        # Wait a bit more for dynamic content to load
+        await asyncio.sleep(browser_config.PAGE_LOAD_WAIT + 1)
         
-        # Dismiss cookie consent banners using helper
+        # Dismiss cookie consent banners using helper - try multiple times
         if self._cookie_handler:
-            await self._cookie_handler.dismiss()
+            for _ in range(3):  # Try up to 3 times
+                dismissed = await self._cookie_handler.dismiss()
+                if dismissed:
+                    await asyncio.sleep(0.5)  # Wait for animation
+                else:
+                    break
+        
+        # Force hide any remaining overlays that might block interaction
+        await self.page.evaluate('''() => {
+            // Remove any overlay that might be blocking interaction
+            const overlays = document.querySelectorAll('[class*="consent"], [class*="cookie"], [class*="overlay"], [id*="consent"], [id*="cookie"]');
+            overlays.forEach(el => {
+                const style = window.getComputedStyle(el);
+                if (style.position === 'fixed' || style.position === 'absolute') {
+                    el.style.display = 'none';
+                }
+            });
+        }''')
         
         title = await self.page.title()
         current_url = self.page.url
@@ -318,11 +366,18 @@ class BrowserAutomation(IBrowserAutomation):
         logger.info("Finding hoverable elements using dynamic detection...")
         
         if self._dynamic_detector:
-            elements = await self._dynamic_detector.find_hoverable_elements()
-            # Limit to configured maximum
-            return elements[:detector_config.MAX_HOVERABLE_ELEMENTS]
+            try:
+                elements = await self._dynamic_detector.find_hoverable_elements()
+                logger.info(f"Dynamic detector returned {len(elements)} elements")
+                # Limit to configured maximum
+                return elements[:detector_config.MAX_HOVERABLE_ELEMENTS]
+            except Exception as e:
+                logger.error(f"Dynamic detector failed: {e}")
+                # Fall through to fallback
         
-        return []
+        # Fallback if dynamic detector is not available or fails
+        logger.info("Using fallback hoverable detection...")
+        return await self.find_nav_elements_fallback()
 
     async def find_clickable_elements(self) -> List[ElementInfo]:
         """
@@ -345,11 +400,96 @@ class BrowserAutomation(IBrowserAutomation):
         logger.info("Finding clickable buttons using dynamic detection...")
         
         if self._dynamic_detector:
-            elements = await self._dynamic_detector.find_clickable_elements()
-            # Limit to configured maximum
-            return elements[:detector_config.MAX_CLICKABLE_BUTTONS]
+            try:
+                elements = await self._dynamic_detector.find_clickable_elements()
+                logger.info(f"Dynamic detector returned {len(elements)} clickable buttons")
+                # Limit to configured maximum
+                return elements[:detector_config.MAX_CLICKABLE_BUTTONS]
+            except Exception as e:
+                logger.error(f"Dynamic detector failed for clickable: {e}")
         
         return []
+
+    async def find_nav_elements_fallback(self) -> List[ElementInfo]:
+        """
+        Fallback method to find navigation elements when dynamic detection fails.
+        Uses simple, reliable selectors that work on most sites.
+        
+        Returns:
+            List of ElementInfo for navigation elements
+        """
+        logger.info("Using fallback navigation detection...")
+        
+        nav_elements = await self.page.evaluate('''() => {
+            const results = [];
+            const seen = new Set();
+            
+            // Find all links in nav, header, or with nav-related classes
+            const selectors = [
+                'nav a',
+                'header a',
+                '[role="navigation"] a',
+                '[class*="nav"] a',
+                '[class*="menu"] a',
+                'a[class*="nav"]',
+                'a[class*="menu"]',
+                '.navigation a',
+                '.main-menu a',
+                '.header a'
+            ];
+            
+            for (const selector of selectors) {
+                try {
+                    const elements = document.querySelectorAll(selector);
+                    for (const el of elements) {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) continue;
+                        
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden') continue;
+                        
+                        const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                        if (!text || text.length > 50) continue;
+                        
+                        const textKey = text.toLowerCase();
+                        if (seen.has(textKey)) continue;
+                        seen.add(textKey);
+                        
+                        results.push({
+                            selector: `text="${text}"`,
+                            tagName: el.tagName.toLowerCase(),
+                            text: text,
+                            href: el.getAttribute('href'),
+                            classes: (el.className || '').toString().split(' ').filter(c => c).slice(0, 5),
+                            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+                        });
+                        
+                        if (results.length >= 20) break;
+                    }
+                } catch (e) {}
+                if (results.length >= 20) break;
+            }
+            
+            return results;
+        }''')
+        
+        elements = []
+        for item in nav_elements:
+            attrs = {}
+            if item.get('href'):
+                attrs['href'] = item['href']
+            
+            elements.append(ElementInfo(
+                selector=item['selector'],
+                tag_name=item['tagName'],
+                text_content=item['text'],
+                classes=item.get('classes', []),
+                attributes=attrs,
+                bounding_box=item.get('rect')
+            ))
+        
+        logger.info(f"Fallback found {len(elements)} navigation elements")
+        return elements
 
     async def simulate_hover(self, element_info: ElementInfo) -> Optional[HoverInteraction]:
         """
