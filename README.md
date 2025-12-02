@@ -117,6 +117,7 @@ uvicorn api.main:app --reload --port 8000
 │   └── test_generator.py
 ├── main.py                    # CLI entry point
 ├── requirements.txt
+├── packages.txt               # System deps for Streamlit Cloud
 ├── .env.example
 ├── DOCUMENTATION.md           # Detailed documentation
 └── README.md
@@ -551,6 +552,23 @@ The `DynamicElementDetector` class uses these behavior-based detection methods:
 | **Visibility Change Detection** | Hidden content | Monitors `display`, `visibility`, `opacity` style changes |
 
 ## Troubleshooting
+
+### Streamlit Cloud Deployment
+
+To deploy on Streamlit Cloud, the project includes:
+
+1. **`packages.txt`** - System dependencies for Playwright (libnss3, libatk1.0-0, etc.)
+2. **Auto-install** - The UI automatically installs Playwright browsers on first run
+
+**Deploy steps:**
+1. Push your code to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Connect your repository
+4. Set the main file path to `ui/app.py`
+5. Add your API key in Secrets (Settings > Secrets):
+   ```toml
+   GEMINI_API_KEY = "your_api_key_here"
+   ```
 
 ### Common Issues
 
