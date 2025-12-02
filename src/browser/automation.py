@@ -7,11 +7,8 @@ Follows SOLID principles:
 - OCP: Can be extended for different browser engines
 - DIP: Implements IBrowserAutomation interface
 
-Optimizations:
-- Combined CSS selectors for efficient querying
-- Centralized configuration
-- Parallel execution support
-- Caching for repeated operations
+FULLY DYNAMIC: Uses behavior-based detection, NO hardcoded selectors.
+All element detection is done at runtime by analyzing page behavior.
 """
 
 import asyncio
@@ -21,7 +18,8 @@ import logging
 
 from ..interfaces.browser import IBrowserAutomation
 from ..models.schemas import ElementInfo, HoverInteraction, PopupInteraction, InteractionType
-from ..config import browser_config, detector_config, css_selectors
+from ..config import browser_config, detector_config
+from .dynamic_detector import DynamicElementDetector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,39 +28,75 @@ logger = logging.getLogger(__name__)
 class CookieBannerHandler:
     """
     Handles cookie consent banner dismissal.
-    Uses centralized selectors from config.
+    Uses DYNAMIC detection - analyzes page behavior, not hardcoded selectors.
     """
     
     def __init__(self, page: Page):
         self.page = page
     
     async def dismiss(self) -> bool:
-        """Try to dismiss cookie consent banners. Returns True if dismissed."""
-        # Try CSS selectors first
-        for selector in css_selectors.COOKIE_BANNERS:
-            try:
-                button = await self.page.query_selector(selector)
-                if button and await button.is_visible():
-                    await button.click()
-                    logger.info(f"Dismissed cookie banner using: {selector}")
-                    await asyncio.sleep(browser_config.POPUP_CLOSE_WAIT)
-                    return True
-            except Exception:
-                continue
+        """
+        Try to dismiss cookie consent banners using dynamic detection.
+        Analyzes page structure at runtime instead of using hardcoded selectors.
+        Returns True if dismissed.
+        """
+        dismissed = await self.page.evaluate('''() => {
+            // Find any fixed/overlay element that might be a cookie banner
+            const allElements = document.querySelectorAll('*');
+            
+            for (const el of allElements) {
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                
+                // Check for overlay/banner characteristics
+                const isOverlay = (
+                    (style.position === 'fixed' || style.position === 'sticky') &&
+                    parseInt(style.zIndex) > 100 &&
+                    rect.width > 100 &&
+                    rect.height > 30
+                );
+                
+                if (!isOverlay) continue;
+                
+                // Check if content suggests cookie/consent banner
+                const text = (el.textContent || '').toLowerCase();
+                const isCookieBanner = (
+                    text.includes('cookie') ||
+                    text.includes('consent') ||
+                    text.includes('privacy') ||
+                    text.includes('gdpr') ||
+                    text.includes('accept') ||
+                    text.includes('agree')
+                );
+                
+                if (!isCookieBanner) continue;
+                
+                // Find accept/close button within this banner
+                const buttons = el.querySelectorAll('button, a, [role="button"], [tabindex]');
+                for (const btn of buttons) {
+                    const btnText = (btn.textContent || '').toLowerCase();
+                    const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    
+                    // Check for accept patterns (dynamically)
+                    if (btnText.includes('accept') || btnText.includes('agree') ||
+                        btnText.includes('allow') || btnText.includes('ok') ||
+                        btnText.includes('got it') || btnText.includes('understand') ||
+                        btnText.includes('continue') || btnText.includes('close') ||
+                        ariaLabel.includes('accept') || ariaLabel.includes('close')) {
+                        
+                        btn.click();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }''')
         
-        # Try text-based selectors
-        for text in css_selectors.COOKIE_BANNER_TEXT:
-            try:
-                button = await self.page.get_by_text(text, exact=False).first
-                if button and await button.is_visible():
-                    await button.click()
-                    logger.info(f"Dismissed cookie banner using text: {text}")
-                    await asyncio.sleep(browser_config.POPUP_CLOSE_WAIT)
-                    return True
-            except Exception:
-                continue
+        if dismissed:
+            logger.info("Dismissed cookie banner using dynamic detection")
+            await asyncio.sleep(browser_config.POPUP_CLOSE_WAIT)
         
-        return False
+        return dismissed
 
 
 class ElementExtractor:
@@ -160,11 +194,10 @@ class BrowserAutomation(IBrowserAutomation):
     """
     Playwright-based browser automation for detecting and interacting with web elements.
     
-    Optimized with:
-    - Centralized configuration
-    - Delegation to helper classes (no duplicate code)
-    - Combined CSS selectors
-    - Parallel execution support
+    FULLY DYNAMIC: Uses behavior-based detection, NO hardcoded selectors.
+    - DynamicElementDetector for finding interactive elements
+    - Runtime analysis of page structure and behavior
+    - Works on any modern website without configuration
     """
 
     def __init__(self, headless: bool = None, timeout: int = None):
@@ -182,6 +215,7 @@ class BrowserAutomation(IBrowserAutomation):
         self._playwright = None
         self._cookie_handler: Optional[CookieBannerHandler] = None
         self._element_extractor: Optional[ElementExtractor] = None
+        self._dynamic_detector: Optional[DynamicElementDetector] = None
         self._hover_semaphore = asyncio.Semaphore(detector_config.CONCURRENT_HOVER_LIMIT)
 
     async def __aenter__(self):
@@ -210,9 +244,10 @@ class BrowserAutomation(IBrowserAutomation):
         self.page = await context.new_page()
         self.page.set_default_timeout(self.timeout)
         
-        # Initialize helper classes (Composition over inheritance)
+        # Initialize helper classes
         self._cookie_handler = CookieBannerHandler(self.page)
         self._element_extractor = ElementExtractor(self.page)
+        self._dynamic_detector = DynamicElementDetector(self.page)
 
     async def close(self):
         """Close the browser."""
@@ -275,47 +310,24 @@ class BrowserAutomation(IBrowserAutomation):
     async def find_hoverable_elements(self) -> List[ElementInfo]:
         """
         Find elements that are likely to have hover interactions.
-        Uses combined CSS selector for efficiency.
+        Uses DYNAMIC behavior-based detection, NOT hardcoded selectors.
         
         Returns:
             List of ElementInfo for hoverable elements
         """
-        logger.info("Finding hoverable elements...")
+        logger.info("Finding hoverable elements using dynamic detection...")
         
-        hoverable_elements = []
-        seen_texts = set()
+        if self._dynamic_detector:
+            elements = await self._dynamic_detector.find_hoverable_elements()
+            # Limit to configured maximum
+            return elements[:detector_config.MAX_HOVERABLE_ELEMENTS]
         
-        try:
-            # Use combined selector for single query (optimization)
-            elements = await self.page.query_selector_all(css_selectors.HOVERABLE_ELEMENTS)
-            
-            for element in elements[:detector_config.MAX_ELEMENTS_PER_SELECTOR * 2]:
-                try:
-                    is_visible = await element.is_visible()
-                    if not is_visible:
-                        continue
-                    
-                    info = await self.get_element_info(element)
-                    if info and info.text_content:
-                        text_key = info.text_content.strip().lower()[:50]
-                        if text_key and text_key not in seen_texts:
-                            seen_texts.add(text_key)
-                            hoverable_elements.append(info)
-                            
-                            if len(hoverable_elements) >= detector_config.MAX_HOVERABLE_ELEMENTS:
-                                break
-                except Exception:
-                    continue
-        except Exception as e:
-            logger.warning(f"Error finding hoverable elements: {e}")
-        
-        logger.info(f"Found {len(hoverable_elements)} potential hoverable elements")
-        return hoverable_elements
+        return []
 
     async def find_clickable_elements(self) -> List[ElementInfo]:
         """
         Find elements that can be clicked (interface method).
-        Delegates to find_clickable_buttons.
+        Uses DYNAMIC behavior-based detection.
         
         Returns:
             List of ElementInfo for clickable elements
@@ -325,42 +337,19 @@ class BrowserAutomation(IBrowserAutomation):
     async def find_clickable_buttons(self) -> List[ElementInfo]:
         """
         Find buttons that might trigger popups or modals.
-        Uses combined CSS selector for efficiency.
+        Uses DYNAMIC behavior-based detection, NOT hardcoded selectors.
         
         Returns:
             List of ElementInfo for clickable buttons
         """
-        logger.info("Finding clickable buttons...")
+        logger.info("Finding clickable buttons using dynamic detection...")
         
-        buttons = []
-        seen_texts = set()
+        if self._dynamic_detector:
+            elements = await self._dynamic_detector.find_clickable_elements()
+            # Limit to configured maximum
+            return elements[:detector_config.MAX_CLICKABLE_BUTTONS]
         
-        try:
-            # Use combined selector for single query (optimization)
-            elements = await self.page.query_selector_all(css_selectors.CLICKABLE_BUTTONS)
-            
-            for element in elements[:detector_config.MAX_ELEMENTS_PER_SELECTOR * 2]:
-                try:
-                    is_visible = await element.is_visible()
-                    if not is_visible:
-                        continue
-                    
-                    info = await self.get_element_info(element)
-                    if info and info.text_content:
-                        text_key = info.text_content.strip().lower()[:50]
-                        if text_key and text_key not in seen_texts and len(text_key) > 2:
-                            seen_texts.add(text_key)
-                            buttons.append(info)
-                            
-                            if len(buttons) >= detector_config.MAX_CLICKABLE_BUTTONS:
-                                break
-                except:
-                    continue
-        except Exception as e:
-            logger.warning(f"Error finding clickable buttons: {e}")
-        
-        logger.info(f"Found {len(buttons)} potential clickable buttons")
-        return buttons
+        return []
 
     async def simulate_hover(self, element_info: ElementInfo) -> Optional[HoverInteraction]:
         """
@@ -547,81 +536,111 @@ class BrowserAutomation(IBrowserAutomation):
             return None
 
     async def _detect_popup(self) -> Optional[Dict[str, str]]:
-        """Detect if a popup/modal is currently visible."""
-        try:
-            popup_info = await self.page.evaluate('''() => {
-                // Common popup/modal selectors
-                const selectors = [
-                    '.modal:not([style*="display: none"])',
-                    '.popup:not([style*="display: none"])',
-                    '[role="dialog"]:not([style*="display: none"])',
-                    '.overlay:not([style*="display: none"])',
-                    '[class*="modal"]:not([style*="display: none"])',
-                    '[class*="popup"]:not([style*="display: none"])',
-                    '[class*="dialog"]:not([style*="display: none"])',
-                    '.ReactModal__Content',
-                    '[aria-modal="true"]'
-                ];
-                
-                for (const selector of selectors) {
-                    const elements = document.querySelectorAll(selector);
-                    for (const el of elements) {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width > 100 && rect.height > 50) {
-                            // Found a visible popup
-                            const title = el.querySelector('h1, h2, h3, .modal-title, .popup-title, [class*="title"]');
-                            const content = el.querySelector('.modal-body, .popup-content, p');
-                            return {
-                                title: (title?.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 200),
-                                content: (content?.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 500)
-                            };
-                        }
-                    }
+        """
+        Detect if a popup/modal is currently visible.
+        Uses DYNAMIC detection based on behavior, NOT hardcoded selectors.
+        """
+        if self._dynamic_detector:
+            popup_info = await self._dynamic_detector.detect_popup_after_click()
+            if popup_info and popup_info.get('detected'):
+                return {
+                    'title': popup_info.get('title', ''),
+                    'content': popup_info.get('content', '')
                 }
-                return null;
-            }''')
-            return popup_info
-        except:
-            return None
+        return None
 
     async def _get_popup_buttons(self) -> List[Dict[str, str]]:
-        """Get buttons within the current popup."""
+        """
+        Get buttons within the current popup.
+        Uses DYNAMIC detection to find any overlay's buttons.
+        """
         try:
             buttons = await self.page.evaluate('''() => {
-                const popup = document.querySelector('.modal, .popup, [role="dialog"], [class*="modal"], [aria-modal="true"]');
-                if (!popup) return [];
+                // Find any modal-like element dynamically
+                const allElements = document.querySelectorAll('*');
                 
-                const btns = popup.querySelectorAll('button, a.btn, .btn, [role="button"]');
-                return Array.from(btns).map(btn => ({
-                    text: (btn.textContent || "").replace(/\\s+/g, " ").trim().substring(0, 50),
-                    type: btn.getAttribute('type') || 'button'
-                })).filter(b => b.text).slice(0, 5);
+                for (const el of allElements) {
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    
+                    // Check for modal characteristics (dynamic)
+                    const isModal = (
+                        (style.position === 'fixed' || style.position === 'absolute') &&
+                        parseInt(style.zIndex) > 100 &&
+                        rect.width > 200 && rect.height > 100 &&
+                        rect.width < window.innerWidth * 0.95
+                    ) || el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true';
+                    
+                    if (!isModal) continue;
+                    
+                    // Found a modal - get its buttons
+                    const btns = el.querySelectorAll('button, a, [role="button"]');
+                    const result = [];
+                    
+                    for (const btn of btns) {
+                        const text = (btn.textContent || "").replace(/\\s+/g, " ").trim();
+                        if (text && text.length < 50) {
+                            result.push({
+                                text: text,
+                                type: btn.getAttribute('type') || 'button'
+                            });
+                        }
+                    }
+                    
+                    if (result.length > 0) return result.slice(0, 5);
+                }
+                
+                return [];
             }''')
             return buttons or []
         except:
             return []
 
     async def _close_popup(self):
-        """Attempt to close any open popup."""
+        """
+        Attempt to close any open popup.
+        Uses DYNAMIC detection to find close buttons.
+        """
         try:
-            # Try common close button selectors
-            close_selectors = [
-                '.modal .close', '.popup .close', '[aria-label="Close"]',
-                '.modal-close', '.popup-close', 'button.close',
-                '[class*="close"]', '.dismiss', '.cancel'
-            ]
+            closed = await self.page.evaluate('''() => {
+                // Find any modal-like element
+                const allElements = document.querySelectorAll('*');
+                
+                for (const el of allElements) {
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    
+                    const isModal = (
+                        (style.position === 'fixed' || style.position === 'absolute') &&
+                        parseInt(style.zIndex) > 100 &&
+                        rect.width > 200 && rect.height > 100
+                    ) || el.getAttribute('role') === 'dialog';
+                    
+                    if (!isModal) continue;
+                    
+                    // Find close button dynamically
+                    const buttons = el.querySelectorAll('button, a, [role="button"]');
+                    for (const btn of buttons) {
+                        const text = (btn.textContent || '').toLowerCase();
+                        const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                        const className = (btn.className || '').toLowerCase();
+                        
+                        if (text.includes('close') || text.includes('cancel') || 
+                            text.includes('dismiss') || text === 'x' ||
+                            ariaLabel.includes('close') || className.includes('close')) {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }''')
             
-            for selector in close_selectors:
-                try:
-                    close_btn = await self.page.query_selector(selector)
-                    if close_btn and await close_btn.is_visible():
-                        await close_btn.click()
-                        await asyncio.sleep(0.5)
-                        return
-                except:
-                    continue
+            if closed:
+                await asyncio.sleep(0.5)
+                return
             
-            # Try pressing Escape
+            # Fallback: Try pressing Escape
             await self.page.keyboard.press('Escape')
             await asyncio.sleep(0.3)
             

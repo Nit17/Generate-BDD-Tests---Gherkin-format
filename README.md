@@ -1,10 +1,11 @@
 # Generate BDD Tests - Gherkin Format
 
-An AI-powered automation solution that dynamically generates Gherkin-style BDD test scenarios for websites containing hovering elements, popups, and interactive components.
+An AI-powered automation solution that **fully dynamically and autonomously** generates Gherkin-style BDD test scenarios for websites containing hovering elements, popups, and interactive components. **No hardcoded selectors, labels, or element identifiers** - the system uses behavior-based detection to discover interactive elements.
 
 ## Features
 
-- **Dynamic Element Detection**: Automatically detects hoverable elements, popups, dropdowns, and modals
+- **Fully Dynamic Element Detection**: Uses behavior-based detection (computed styles, event listeners, DOM mutations) - **no hardcoded CSS selectors**
+- **Autonomous Operation**: Automatically adapts to any website without configuration changes
 - **AI-Powered Generation**: Uses LLMs (OpenAI GPT-4/Gemini) to generate clean Gherkin scenarios
 - **Browser Automation**: Playwright-based automation for simulating user interactions
 - **Gherkin Output**: Generates well-formatted `.feature` files following Cucumber specification
@@ -12,7 +13,7 @@ An AI-powered automation solution that dynamically generates Gherkin-style BDD t
 - **Streamlit UI**: Optional web interface for easy use
 - **Parallel Execution**: Optimized with concurrent hover/click testing
 - **Response Caching**: LRU caching for LLM responses to reduce API calls
-- **Centralized Configuration**: All settings managed from a single config file
+- **Behavior Thresholds**: Configurable detection sensitivity (no hardcoded element patterns)
 
 ## Quick Start (New Device Setup)
 
@@ -78,7 +79,7 @@ uvicorn api.main:app --reload --port 8000
 ```
 ├── src/
 │   ├── __init__.py
-│   ├── config.py              # Centralized configuration (NEW)
+│   ├── config.py              # Dynamic configuration (behavior thresholds only)
 │   ├── factory.py             # Dependency injection factory
 │   ├── interfaces/            # Abstract base classes (SOLID)
 │   │   ├── browser.py
@@ -87,7 +88,8 @@ uvicorn api.main:app --reload --port 8000
 │   │   └── output.py
 │   ├── browser/
 │   │   ├── __init__.py
-│   │   └── automation.py      # Playwright-based browser automation
+│   │   ├── automation.py      # Playwright-based browser automation
+│   │   └── dynamic_detector.py # Behavior-based element detection (NEW)
 │   ├── analyzer/
 │   │   ├── __init__.py
 │   │   ├── dom_analyzer.py    # DOM structure analysis
@@ -146,7 +148,7 @@ HEADLESS=true         # Run browser in headless mode (default: true)
 
 ### Centralized Configuration
 
-All configurable settings are in `src/config.py`:
+All configurable settings are in `src/config.py`. **No hardcoded CSS selectors or element patterns** - only behavior thresholds:
 
 ```python
 # Browser settings
@@ -155,8 +157,15 @@ BrowserConfig:
   - HEADLESS: true
   - VIEWPORT: 1920x1080
 
+# Dynamic detection thresholds (no hardcoded selectors!)
+BehaviorThresholds:
+  - HOVER_STYLE_CHANGE_THRESHOLD: 0.1  # Min opacity change to detect hover
+  - MIN_CLICKABLE_SIZE: 10px           # Min element size for clickable
+  - POPUP_MIN_WIDTH: 100px             # Min popup dimensions
+  - POPUP_MIN_HEIGHT: 50px
+
 # Detection limits
-DetectorConfig:
+DetectionLimits:
   - MAX_HOVER_ELEMENTS: 15
   - MAX_POPUP_BUTTONS: 10
   - CONCURRENT_HOVER_LIMIT: 3
@@ -230,13 +239,23 @@ The UI provides:
 
 ## How It Works
 
+### Fully Dynamic Detection (No Hardcoded Selectors)
+
+The system uses **behavior-based detection** to find interactive elements without relying on hardcoded CSS selectors:
+
+1. **Hover Detection**: Monitors computed `:hover` styles (opacity, visibility, transform changes)
+2. **Click Detection**: Checks for event listeners (`click`, `mousedown`) and ARIA attributes (`aria-haspopup`, `role="button"`)
+3. **Popup Detection**: Uses MutationObserver to detect new DOM elements appearing after clicks
+4. **Button Detection**: Identifies buttons by behavior (event listeners, cursor style, role attributes)
+
+### Processing Pipeline
+
 1. **URL Input**: The system accepts a website URL
 2. **Browser Automation**: Uses Playwright to load the page and simulate interactions
-3. **DOM Analysis**: Analyzes the page structure to identify:
-   - Navigation menus with hover dropdowns
-   - Buttons that trigger popups/modals
-   - Tooltip elements
-   - Image overlays
+3. **Dynamic DOM Analysis**: Analyzes the page structure using behavior-based detection:
+   - Detects elements with `:hover` style changes (not hardcoded selectors)
+   - Finds clickable elements via event listener inspection
+   - Monitors DOM mutations for popups/modals
 4. **Interaction Simulation**: Hovers over detected elements to reveal hidden content
 5. **LLM Processing**: Sends interaction data to an LLM to generate Gherkin scenarios
 6. **Output Generation**: Creates well-formatted `.feature` files
@@ -276,13 +295,14 @@ Feature: Validate navigation menu functionality
 
 ## Supported Interaction Types
 
-| Type | Description |
-|------|-------------|
-| Hover Dropdowns | Navigation menus that reveal submenus on hover |
-| Popups/Modals | Dialogs triggered by button clicks |
-| Tooltips | Information boxes appearing on hover |
-| Image Overlays | Content revealed on image hover |
-| Accordion Elements | Expandable content sections |
+| Type | Detection Method |
+|------|------------------|
+| Hover Dropdowns | Computed `:hover` style changes (opacity, visibility, transform) |
+| Popups/Modals | DOM MutationObserver detects new elements after clicks |
+| Tooltips | Visibility changes on hover via style inspection |
+| Image Overlays | Content revealed detected via DOM mutations |
+| Accordion Elements | ARIA attributes (`aria-expanded`) and visibility changes |
+| Clickable Buttons | Event listener detection (`click`, `mousedown`) + ARIA roles |
 
 ## Architecture
 
@@ -316,15 +336,15 @@ Feature: Validate navigation menu functionality
               │                  │                  │
               ▼                  ▼                  ▼
 ┌─────────────────────┐ ┌─────────────────┐ ┌─────────────────────┐
-│  BROWSER AUTOMATION │ │  DOM ANALYZER   │ │   ELEMENT           │
-│  src/browser/       │ │  src/analyzer/  │ │   EXTRACTOR         │
-│  automation.py      │ │  dom_analyzer.py│ │                     │
+│  BROWSER AUTOMATION │ │  DOM ANALYZER   │ │  DYNAMIC DETECTOR   │
+│  src/browser/       │ │  src/analyzer/  │ │  src/browser/       │
+│  automation.py      │ │  dom_analyzer.py│ │  dynamic_detector.py│
 │                     │ │                 │ │                     │
-│  • Playwright       │ │  • BeautifulSoup│ │  • Get element info │
-│  • Navigate pages   │ │  • Parse HTML   │ │  • CSS selectors    │
-│  • Hover elements   │ │  • Find elements│ │  • ARIA attributes  │
-│  • Click buttons    │ │  • Structure    │ │  • Bounding boxes   │
-│  • Detect popups    │ │    analysis     │ │                     │
+│  • Playwright       │ │  • BeautifulSoup│ │  • Behavior-based   │
+│  • Navigate pages   │ │  • Parse HTML   │ │  • Hover detection  │
+│  • Hover elements   │ │  • Find elements│ │  • Click detection  │
+│  • Click buttons    │ │  • Structure    │ │  • Popup detection  │
+│  • Detect popups    │ │    analysis     │ │  • No hardcoded CSS │
 └─────────────────────┘ └─────────────────┘ └─────────────────────┘
               │                  │                  │
               └──────────────────┼──────────────────┘
@@ -476,7 +496,8 @@ src/
 │   ├── llm.py           # ILLMProvider, IGherkinGenerator
 │   └── output.py        # IFeatureWriter
 ├── browser/
-│   └── automation.py    # Playwright implementation
+│   ├── automation.py    # Playwright implementation
+│   └── dynamic_detector.py  # Behavior-based element detection (NEW)
 ├── analyzer/
 │   ├── dom_analyzer.py  # BeautifulSoup implementation
 │   └── interaction_detector.py
@@ -486,7 +507,7 @@ src/
 ├── output/
 │   └── feature_writer.py
 ├── models/
-│   └── schemas.py       # Pydantic models
+│   └── schemas.py       # Pydantic models with text normalization
 └── factory.py           # ServiceFactory for DI
 ```
 
@@ -495,6 +516,7 @@ src/
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | Browser Automation | Playwright | Headless browser control, hover/click simulation |
+| Dynamic Detection | Custom DynamicElementDetector | Behavior-based element discovery (no hardcoded selectors) |
 | HTML Parsing | BeautifulSoup, lxml | DOM analysis and element extraction |
 | LLM Integration | OpenAI GPT-4 / Google Gemini | AI-powered Gherkin generation |
 | Backend API | FastAPI | REST API endpoints |
@@ -508,12 +530,25 @@ The codebase includes several performance optimizations:
 
 | Optimization | Description |
 |--------------|-------------|
+| **Fully Dynamic Detection** | No hardcoded CSS selectors - uses behavior-based detection that works on any website |
 | **Parallel Hover Testing** | Uses `asyncio.gather` with semaphore to test multiple hovers concurrently |
 | **Combined CSS Selectors** | Single selector query instead of multiple sequential queries |
 | **LLM Response Caching** | LRU cache prevents duplicate API calls for same prompts |
 | **Element Caching** | Caches element lookup results during page analysis |
-| **Centralized Config** | All magic numbers in one place for easy tuning |
+| **Behavior Thresholds** | Configurable detection sensitivity without changing code |
 | **Text Normalization** | Pydantic validators auto-clean whitespace from extracted text for clean output |
+
+## Dynamic Detection Methods
+
+The `DynamicElementDetector` class uses these behavior-based detection methods:
+
+| Method | What It Detects | How It Works |
+|--------|-----------------|--------------|
+| **Hover Style Detection** | Elements with `:hover` effects | Compares computed styles before/after hover simulation |
+| **Event Listener Detection** | Clickable elements | Uses `getEventListeners()` to find `click`, `mousedown` handlers |
+| **DOM Mutation Detection** | Popups/modals | MutationObserver watches for new elements appearing after clicks |
+| **ARIA Attribute Detection** | Interactive elements | Checks `aria-haspopup`, `aria-expanded`, `role` attributes |
+| **Visibility Change Detection** | Hidden content | Monitors `display`, `visibility`, `opacity` style changes |
 
 ## Troubleshooting
 

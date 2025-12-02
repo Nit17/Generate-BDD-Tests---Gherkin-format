@@ -197,14 +197,12 @@ class InteractionDetector(IInteractionDetector):
         # Get modal triggers from DOM analysis
         modal_triggers = dom_analyzer.find_modal_triggers()
         
-        # Keywords that indicate popup-triggering buttons
-        POPUP_KEYWORDS = detector_config.POPUP_KEYWORDS
-        
-        # Build list of elements to test
+        # Build list of elements to test - ALL clickable buttons are candidates
+        # No hardcoded keywords - the dynamic detector already filtered by behavior
         elements_to_test: List[ElementInfo] = []
         tested_texts = set()
         
-        # Filter buttons likely to trigger popups
+        # All buttons from dynamic detection are already likely to trigger interactions
         for button in buttons[:MAX_CONCURRENT_CLICKS]:
             if not button.text_content:
                 continue
@@ -215,16 +213,8 @@ class InteractionDetector(IInteractionDetector):
             if text_key in tested_texts:
                 continue
             
-            # Check if likely to trigger popup
-            likely_popup = any(keyword in text.lower() for keyword in POPUP_KEYWORDS)
-            is_modal_trigger = any(
-                t.get('text', '').lower() == text.lower() 
-                for t in modal_triggers
-            )
-            
-            if likely_popup or is_modal_trigger:
-                tested_texts.add(text_key)
-                elements_to_test.append(button)
+            tested_texts.add(text_key)
+            elements_to_test.append(button)
         
         # Add external links that might show leaving warnings
         for trigger in modal_triggers[:detector_config.MAX_MODAL_TRIGGERS]:
