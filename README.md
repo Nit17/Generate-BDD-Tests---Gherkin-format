@@ -7,31 +7,104 @@ An AI-powered automation solution that dynamically generates Gherkin-style BDD t
 - **Dynamic Element Detection**: Automatically detects hoverable elements, popups, dropdowns, and modals
 - **AI-Powered Generation**: Uses LLMs (OpenAI GPT-4/Gemini) to generate clean Gherkin scenarios
 - **Browser Automation**: Playwright-based automation for simulating user interactions
-- **Gherkin Output**: Generates well-formatted `.feature` files
+- **Gherkin Output**: Generates well-formatted `.feature` files following Cucumber specification
 - **FastAPI Backend**: REST API for easy integration
 - **Streamlit UI**: Optional web interface for easy use
+- **Parallel Execution**: Optimized with concurrent hover/click testing
+- **Response Caching**: LRU caching for LLM responses to reduce API calls
+- **Centralized Configuration**: All settings managed from a single config file
+
+## Quick Start (New Device Setup)
+
+### Prerequisites
+
+- **Python 3.9+** (tested with Python 3.13)
+- **Git**
+- **Internet connection** (for LLM API calls)
+
+### Step-by-Step Installation
+
+```bash
+# Step 1: Clone the repository
+git clone https://github.com/Nit17/Generate-BDD-Tests---Gherkin-format.git
+cd Generate-BDD-Tests---Gherkin-format
+
+# Step 2: Create and activate virtual environment
+python -m venv venv
+
+# On macOS/Linux:
+source venv/bin/activate
+
+# On Windows:
+venv\Scripts\activate
+
+# Step 3: Install Python dependencies
+pip install -r requirements.txt
+
+# Step 4: Install Playwright browser (required for web automation)
+playwright install chromium
+
+# Step 5: Set up environment variables
+cp .env.example .env
+# Edit .env file and add your API key (see Configuration section below)
+
+# Step 6: Verify installation
+python -c "from src import ServiceFactory; print('Installation successful!')"
+```
+
+### Running the Application
+
+After installation, you can run the application in three ways:
+
+#### Option 1: Command Line (Recommended for quick use)
+```bash
+python main.py --url "https://example.com" --provider gemini
+```
+
+#### Option 2: Web UI (Recommended for beginners)
+```bash
+streamlit run ui/app.py
+# Open http://localhost:8501 in your browser
+```
+
+#### Option 3: REST API (Recommended for integration)
+```bash
+uvicorn api.main:app --reload --port 8000
+# API available at http://localhost:8000
+```
 
 ## Project Structure
 
 ```
 ├── src/
 │   ├── __init__.py
+│   ├── config.py              # Centralized configuration (NEW)
+│   ├── factory.py             # Dependency injection factory
+│   ├── interfaces/            # Abstract base classes (SOLID)
+│   │   ├── browser.py
+│   │   ├── analyzer.py
+│   │   ├── llm.py
+│   │   └── output.py
 │   ├── browser/
 │   │   ├── __init__.py
 │   │   └── automation.py      # Playwright-based browser automation
 │   ├── analyzer/
 │   │   ├── __init__.py
 │   │   ├── dom_analyzer.py    # DOM structure analysis
-│   │   └── interaction_detector.py  # Hover/popup detection
+│   │   └── interaction_detector.py  # Parallel hover/popup detection
 │   ├── llm/
 │   │   ├── __init__.py
+│   │   ├── providers.py       # OpenAI/Gemini providers with caching
 │   │   └── gherkin_generator.py  # LLM-based Gherkin generation
 │   ├── output/
 │   │   ├── __init__.py
 │   │   └── feature_writer.py  # .feature file writer
-│   └── models/
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── schemas.py         # Pydantic models
+│   └── utils/
 │       ├── __init__.py
-│       └── schemas.py         # Pydantic models
+│       └── cache.py           # LRU caching utilities (NEW)
 ├── api/
 │   ├── __init__.py
 │   └── main.py                # FastAPI application
@@ -43,59 +116,56 @@ An AI-powered automation solution that dynamically generates Gherkin-style BDD t
 ├── main.py                    # CLI entry point
 ├── requirements.txt
 ├── .env.example
+├── DOCUMENTATION.md           # Detailed documentation
 └── README.md
 ```
 
-## Installation
-
-### Prerequisites
-
-- Python 3.9+
-- Chrome/Chromium browser
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Nit17/Generate-BDD-Tests---Gherkin-format.git
-   cd Generate-BDD-Tests---Gherkin-format
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Install Playwright browsers**
-   ```bash
-   playwright install chromium
-   ```
-
-5. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your API keys
-   ```
-
 ## Configuration
+
+### Environment Variables
 
 Create a `.env` file with your API keys:
 
 ```env
-# Choose one LLM provider
+# LLM Provider API Key (choose one)
 OPENAI_API_KEY=your_openai_api_key
 # OR
 GEMINI_API_KEY=your_gemini_api_key
 
 # Optional settings
-LLM_PROVIDER=openai  # or 'gemini'
-HEADLESS=true        # Run browser in headless mode
+LLM_PROVIDER=gemini   # Options: 'openai' or 'gemini' (default: gemini)
+HEADLESS=true         # Run browser in headless mode (default: true)
+```
+
+### Getting API Keys
+
+| Provider | How to Get Key |
+|----------|---------------|
+| **Gemini** (Recommended - Free tier available) | Visit [Google AI Studio](https://aistudio.google.com/apikey) |
+| **OpenAI** | Visit [OpenAI Platform](https://platform.openai.com/api-keys) |
+
+### Centralized Configuration
+
+All configurable settings are in `src/config.py`:
+
+```python
+# Browser settings
+BrowserConfig:
+  - DEFAULT_TIMEOUT: 30000ms
+  - HEADLESS: true
+  - VIEWPORT: 1920x1080
+
+# Detection limits
+DetectorConfig:
+  - MAX_HOVER_ELEMENTS: 15
+  - MAX_POPUP_BUTTONS: 10
+  - CONCURRENT_HOVER_LIMIT: 3
+
+# LLM settings
+LLMConfig:
+  - GEMINI_MODEL: "gemini-2.0-flash"
+  - OPENAI_MODEL: "gpt-4"
+  - TEMPERATURE: 0.3
 ```
 
 ## Usage
@@ -103,11 +173,17 @@ HEADLESS=true        # Run browser in headless mode
 ### Command Line Interface
 
 ```bash
-# Basic usage
-python main.py --url "https://www.tivdak.com/patient-stories/"
+# Basic usage with Gemini (default)
+python main.py --url "https://www.example.com"
 
-# With options
-python main.py --url "https://www.nike.com/in/" --output ./output --provider openai
+# Specify LLM provider
+python main.py --url "https://www.example.com" --provider openai
+
+# Custom output directory
+python main.py --url "https://www.example.com" --output ./my-tests
+
+# Show browser window (non-headless)
+python main.py --url "https://www.example.com" --no-headless
 ```
 
 ### FastAPI Backend
@@ -117,15 +193,24 @@ python main.py --url "https://www.nike.com/in/" --output ./output --provider ope
 uvicorn api.main:app --reload --port 8000
 ```
 
-API Endpoints:
-- `POST /generate` - Generate Gherkin tests for a URL
-- `GET /health` - Health check
+**API Endpoints:**
 
-Example request:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Welcome message |
+| `GET` | `/health` | Health check |
+| `POST` | `/generate` | Generate Gherkin tests |
+| `GET` | `/generate` | Generate tests via query params |
+
+**Example API Request:**
 ```bash
+# POST request
 curl -X POST "http://localhost:8000/generate" \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.tivdak.com/patient-stories/"}'
+  -d '{"url": "https://www.example.com"}'
+
+# GET request
+curl "http://localhost:8000/generate?url=https://www.example.com"
 ```
 
 ### Streamlit UI
@@ -135,6 +220,13 @@ streamlit run ui/app.py
 ```
 
 Then open `http://localhost:8501` in your browser.
+
+The UI provides:
+- URL input field
+- LLM provider selection (OpenAI/Gemini)
+- Real-time status updates
+- Preview of generated Gherkin scenarios
+- Download button for .feature files
 
 ## How It Works
 
@@ -400,11 +492,93 @@ src/
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Browser Automation | Playwright |
-| HTML Parsing | BeautifulSoup, lxml |
-| LLM Integration | OpenAI GPT-4 / Google Gemini |
-| Backend API | FastAPI |
-| UI | Streamlit |
-| Data Models | Pydantic |
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Browser Automation | Playwright | Headless browser control, hover/click simulation |
+| HTML Parsing | BeautifulSoup, lxml | DOM analysis and element extraction |
+| LLM Integration | OpenAI GPT-4 / Google Gemini | AI-powered Gherkin generation |
+| Backend API | FastAPI | REST API endpoints |
+| UI | Streamlit | Web-based user interface |
+| Data Models | Pydantic | Request/response validation |
+| Caching | Custom LRU Cache | Response caching for performance |
+
+## Performance Optimizations
+
+The codebase includes several performance optimizations:
+
+| Optimization | Description |
+|--------------|-------------|
+| **Parallel Hover Testing** | Uses `asyncio.gather` with semaphore to test multiple hovers concurrently |
+| **Combined CSS Selectors** | Single selector query instead of multiple sequential queries |
+| **LLM Response Caching** | LRU cache prevents duplicate API calls for same prompts |
+| **Element Caching** | Caches element lookup results during page analysis |
+| **Centralized Config** | All magic numbers in one place for easy tuning |
+
+## Troubleshooting
+
+### Common Issues
+
+**1. "playwright install chromium" fails**
+```bash
+# Try with sudo on Linux/macOS
+sudo playwright install chromium
+
+# Or install dependencies first
+playwright install-deps chromium
+```
+
+**2. "Import could not be resolved" errors in IDE**
+```bash
+# Make sure virtual environment is activated
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+**3. LLM API errors**
+```bash
+# Verify API key is set
+echo $GEMINI_API_KEY  # or $OPENAI_API_KEY
+
+# Test API key
+python -c "from src.llm.providers import GeminiProvider; print('OK')"
+```
+
+**4. Browser timeout errors**
+```bash
+# Increase timeout in src/config.py
+# Or run with visible browser to debug
+python main.py --url "https://example.com" --no-headless
+```
+
+**5. No interactions detected**
+- Some websites block automated browsers
+- Try a different website to verify setup
+- Check if the website uses JavaScript frameworks that need more load time
+
+### Running Tests
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run with coverage
+python -m pytest tests/ --cov=src
+
+# Run specific test
+python -m pytest tests/test_generator.py::TestDOMAnalyzer -v
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
