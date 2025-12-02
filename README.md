@@ -513,6 +513,7 @@ The codebase includes several performance optimizations:
 | **LLM Response Caching** | LRU cache prevents duplicate API calls for same prompts |
 | **Element Caching** | Caches element lookup results during page analysis |
 | **Centralized Config** | All magic numbers in one place for easy tuning |
+| **Text Normalization** | Pydantic validators auto-clean whitespace from extracted text for clean output |
 
 ## Troubleshooting
 
