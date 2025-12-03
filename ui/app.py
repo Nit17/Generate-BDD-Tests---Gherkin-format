@@ -19,11 +19,25 @@ from src.output.feature_writer import FeatureWriter
 
 def install_playwright_browsers():
     """Install Playwright browsers if not already installed."""
-    # Check if already installed by looking for the browser executable
-    playwright_cache = os.path.expanduser("~/.cache/ms-playwright")
-    chromium_installed = os.path.exists(playwright_cache) and any(
-        "chromium" in d for d in os.listdir(playwright_cache) if os.path.isdir(os.path.join(playwright_cache, d))
-    ) if os.path.exists(playwright_cache) else False
+    import platform
+    
+    # Determine Playwright cache path based on OS
+    if platform.system() == "Windows":
+        # Windows: %USERPROFILE%\AppData\Local\ms-playwright
+        playwright_cache = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'ms-playwright')
+    else:
+        # macOS/Linux: ~/.cache/ms-playwright
+        playwright_cache = os.path.expanduser("~/.cache/ms-playwright")
+    
+    chromium_installed = False
+    if os.path.exists(playwright_cache):
+        try:
+            chromium_installed = any(
+                "chromium" in d for d in os.listdir(playwright_cache) 
+                if os.path.isdir(os.path.join(playwright_cache, d))
+            )
+        except (OSError, PermissionError):
+            chromium_installed = False
     
     if chromium_installed:
         return True
@@ -35,7 +49,7 @@ def install_playwright_browsers():
             [sys.executable, "-m", "playwright", "install", "chromium"],
             check=True,
             capture_output=True,
-            timeout=120  # 2 minute timeout
+            timeout=180  # 3 minute timeout for slower connections
         )
         st.success("Playwright browsers installed successfully!")
         return True

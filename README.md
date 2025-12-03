@@ -25,19 +25,15 @@ An AI-powered automation solution that **fully dynamically and autonomously** ge
 
 ### Step-by-Step Installation
 
+#### On macOS/Linux:
 ```bash
 # Step 1: Clone the repository
 git clone https://github.com/Nit17/Generate-BDD-Tests---Gherkin-format.git
 cd Generate-BDD-Tests---Gherkin-format
 
 # Step 2: Create and activate virtual environment
-python -m venv venv
-
-# On macOS/Linux:
+python3 -m venv venv
 source venv/bin/activate
-
-# On Windows:
-venv\Scripts\activate
 
 # Step 3: Install Python dependencies
 pip install -r requirements.txt
@@ -48,6 +44,31 @@ playwright install chromium
 # Step 5: Set up environment variables
 cp .env.example .env
 # Edit .env file and add your API key (see Configuration section below)
+
+# Step 6: Verify installation
+python -c "from src import ServiceFactory; print('Installation successful!')"
+```
+
+#### On Windows (Command Prompt or PowerShell):
+```cmd
+# Step 1: Clone the repository
+git clone https://github.com/Nit17/Generate-BDD-Tests---Gherkin-format.git
+cd Generate-BDD-Tests---Gherkin-format
+
+# Step 2: Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Step 3: Install Python dependencies
+pip install -r requirements.txt
+
+# Step 4: Install Playwright browser and dependencies
+playwright install chromium
+playwright install-deps chromium
+
+# Step 5: Set up environment variables
+copy .env.example .env
+# Edit .env file with notepad and add your API key
 
 # Step 6: Verify installation
 python -c "from src import ServiceFactory; print('Installation successful!')"
@@ -574,14 +595,27 @@ To deploy on Streamlit Cloud, the project includes:
 
 **1. "playwright install chromium" fails**
 ```bash
-# Try with sudo on Linux/macOS
+# On Linux/macOS - try with sudo
 sudo playwright install chromium
+playwright install-deps chromium
 
-# Or install dependencies first
+# On Windows - run Command Prompt as Administrator
+playwright install chromium
 playwright install-deps chromium
 ```
 
-**2. "Import could not be resolved" errors in IDE**
+**2. Windows: "Executable doesn't exist" or browser not found**
+```cmd
+# Make sure to install dependencies on Windows
+playwright install-deps chromium
+
+# If still failing, try reinstalling
+pip uninstall playwright
+pip install playwright
+playwright install chromium
+```
+
+**3. "Import could not be resolved" errors in IDE**
 ```bash
 # Make sure virtual environment is activated
 source venv/bin/activate  # macOS/Linux
@@ -591,16 +625,19 @@ venv\Scripts\activate     # Windows
 pip install -r requirements.txt
 ```
 
-**3. LLM API errors**
+**4. LLM API errors**
 ```bash
-# Verify API key is set
-echo $GEMINI_API_KEY  # or $OPENAI_API_KEY
+# On macOS/Linux - verify API key
+echo $GEMINI_API_KEY
+
+# On Windows - verify API key
+echo %GEMINI_API_KEY%
 
 # Test API key
 python -c "from src.llm.providers import GeminiProvider; print('OK')"
 ```
 
-**4. Browser timeout errors**
+**5. Browser timeout errors**
 ```bash
 # Increase timeout in src/config.py
 # Or run with visible browser to debug
