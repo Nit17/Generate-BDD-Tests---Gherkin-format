@@ -4,7 +4,6 @@ An AI-powered automation solution that **fully dynamically and autonomously** ge
 
 ## Features
 
-
 - **Fully Dynamic Element Detection**: Uses behavior-based detection (computed styles, event listeners, DOM mutations) - **no hardcoded CSS selectors**
 - **Autonomous Operation**: Automatically adapts to any website without configuration changes
 - **AI-Powered Generation**: Uses LLMs (OpenAI GPT-4/Gemini) to generate clean Gherkin scenarios
