@@ -26,7 +26,7 @@
 The key differentiator is that it's **fully dynamic** - no hardcoded CSS selectors or element identifiers. It discovers interactive elements through behavior analysis.
 
 ### Q: Why did you build this project?
-**A:** Manual test case creation is time-consuming and error-prone. This tool automates the discovery of interactive elements and generates standardized BDD test scenarios, reducing QA effort by 70-80% for initial test case creation.
+**A:** Manual test case creation is time-consuming and error-prone. This tool automates the discovery of interactive elements and generates standardized BDD(behavior-based detection) test scenarios, reducing QA effort by 70-80% for initial test case creation.
 
 ### Q: Who would use this tool?
 **A:** 
