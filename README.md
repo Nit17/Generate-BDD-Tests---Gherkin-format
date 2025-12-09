@@ -15,6 +15,7 @@ An AI-powered automation solution that **fully dynamically and autonomously** ge
 - **Response Caching**: LRU caching for LLM responses to reduce API calls
 - **Behavior Thresholds**: Configurable detection sensitivity (no hardcoded element patterns)
 
+
 ## Quick Start (New Device Setup)
 
 ### Prerequisites
