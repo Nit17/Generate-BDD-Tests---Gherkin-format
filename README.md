@@ -19,7 +19,6 @@ An AI-powered automation solution that **fully dynamically and autonomously** ge
 
 ### Prerequisites
 
-
 - **Python 3.9+** (tested with Python 3.13)
 - **Git**
 - **Internet connection** (for LLM API calls)
