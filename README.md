@@ -448,7 +448,6 @@ Feature: Validate navigation menu functionality
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-
 ### Data Flow Diagram
 
 ```
