@@ -451,6 +451,7 @@ Feature: Validate navigation menu functionality
 ### Data Flow Diagram
 
 ```
+
 ┌──────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   URL    │────▶│   Browser    │────▶│   Detect     │────▶│   Generate   │
 │  Input   │     │   Navigate   │     │ Interactions │     │   Gherkin    │
