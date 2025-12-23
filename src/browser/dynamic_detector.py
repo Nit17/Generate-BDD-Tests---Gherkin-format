@@ -494,7 +494,6 @@ class DynamicElementDetector:
             'revealed_links': new_links[:10]
         }
 
-
     async def detect_popup_after_click(self) -> Optional[Dict[str, Any]]:
         """
         Detect if a popup/modal appeared after a click action.
