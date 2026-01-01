@@ -19,7 +19,6 @@ from ..models.schemas import ElementInfo
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 def _filter_none_values(d: Dict[str, Any]) -> Dict[str, str]:
     """Filter out None values from a dictionary and convert to strings."""
     return {k: str(v) for k, v in d.items() if v is not None}
