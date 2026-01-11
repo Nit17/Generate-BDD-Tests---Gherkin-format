@@ -501,7 +501,6 @@ Feature: Validate navigation menu functionality
 
 This project follows SOLID design principles for maintainable and extensible code:
 
-
 | Principle | Implementation |
 |-----------|---------------|
 | **Single Responsibility (SRP)** | Each class has one job: `BrowserAutomation` handles browser control, `DOMAnalyzer` parses HTML, `GherkinGenerator` creates tests |
