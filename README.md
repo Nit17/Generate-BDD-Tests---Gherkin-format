@@ -497,6 +497,7 @@ Feature: Validate navigation menu functionality
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
+
 ### SOLID Principles
 
 This project follows SOLID design principles for maintainable and extensible code:
