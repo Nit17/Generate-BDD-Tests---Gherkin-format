@@ -2,6 +2,7 @@
 
 An AI-powered automation solution that **fully dynamically and autonomously** generates Gherkin-style BDD test scenarios for websites containing hovering elements, popups, and interactive components. **No hardcoded selectors, labels, or element identifiers** - the system uses behavior-based detection to discover interactive elements.
 
+
 ## Features
 
 - **Fully Dynamic Element Detection**: Uses behavior-based detection (computed styles, event listeners, DOM(document object model) mutations) - **no hardcoded CSS selectors**
